@@ -122,7 +122,7 @@ The CDN ref is defined in four places that must stay in sync:
 - The hardcoded language-URL fallback in `cdn/DSMRindex.js` (used only when
   `CDN_BASE` is unset).
 
-All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.4`.
+All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.5`.
 
 ### Branching model
 
