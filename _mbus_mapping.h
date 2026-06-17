@@ -344,3 +344,20 @@ static const ActiveRecipe kKlefrRecipes[] = {
   {0x6020, 1, (uint8_t)MbSource::energy_returned_avg_kwh,    (uint8_t)ModbusDataType::FLOAT,  0},
   {0x6022, 1, (uint8_t)MbSource::energy_returned_avg_kwh,    (uint8_t)ModbusDataType::FLOAT,  0},
 };
+
+static const ActiveRecipe kSolaxM140M340Recipes[] = {
+  {0,     1,    (uint8_t)MbSource::constant,                  (uint8_t)ModbusDataType::INT16,  118},
+  {12294, 10,   (uint8_t)MbSource::voltage_l1_v,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12296, 10,   (uint8_t)MbSource::voltage_l2_v,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12298, 10,   (uint8_t)MbSource::voltage_l3_v,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12300, 1000, (uint8_t)MbSource::current_l1_a,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12302, 1000, (uint8_t)MbSource::current_l2_a,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12304, 1000, (uint8_t)MbSource::current_l3_a,              (uint8_t)ModbusDataType::FLOAT,  0},
+  {12306, 10000,(uint8_t)MbSource::net_power_total_kw,         (uint8_t)ModbusDataType::FLOAT,  0},
+  {12308, 10000,(uint8_t)MbSource::net_power_l1_kw,           (uint8_t)ModbusDataType::FLOAT,  0},
+  {12310, 10000,(uint8_t)MbSource::net_power_l2_kw,           (uint8_t)ModbusDataType::FLOAT,  0},
+  {12312, 10000,(uint8_t)MbSource::net_power_l3_kw,           (uint8_t)ModbusDataType::FLOAT,  0},
+  {12314, 1,    (uint8_t)MbSource::constant,                  (uint8_t)ModbusDataType::FLOAT,  50000},
+  {12544, 10,   (uint8_t)MbSource::energy_delivered_total_kwh, (uint8_t)ModbusDataType::FLOAT,  0},
+  {12546, 10,   (uint8_t)MbSource::energy_returned_total_kwh,  (uint8_t)ModbusDataType::FLOAT,  0},
+};
