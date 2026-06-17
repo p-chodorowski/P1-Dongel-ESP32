@@ -51,6 +51,7 @@ struct {
 #include <LittleFS.h>
 #include <Preferences.h>
 #include <dsmr2.h>               // https://github.com/mhendriks/dsmr2Lib
+#include "P1FixedReaderCompat.h" // drop when dsmr2Lib defines P1FixedReader
 #include "esp_chip_info.h"
 #include <esp_now.h>             //https://randomnerdtutorials.com/esp-now-auto-pairing-esp32-esp8266/
 #include <esp_task_wdt.h>

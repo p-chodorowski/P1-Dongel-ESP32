@@ -166,6 +166,7 @@ static const ActiveRecipe* activeRecipes = nullptr;
 static size_t activeRecipeCount = 0;
 static uint16_t activeRecipeMaxReg = 0;
 static bool activeRecipeLswFirst = false;
+static constexpr int kModbusMappingSolaxM140M340 = 10;
 static constexpr int kModbusMappingFroniusSunSpec203 = 15;
 
 #include "_mbus_mapping.h"
@@ -602,6 +603,8 @@ static bool loadPresetRecipes(int mappingChoice) {
       return loadActiveRecipes(kKlefrRecipes, sizeof(kKlefrRecipes) / sizeof(kKlefrRecipes[0]));
     case 9:
       return loadActiveRecipes(kPhoenixEemXm3xxRecipes, sizeof(kPhoenixEemXm3xxRecipes) / sizeof(kPhoenixEemXm3xxRecipes[0]));
+    case kModbusMappingSolaxM140M340:
+      return loadActiveRecipes(kSolaxM140M340Recipes, sizeof(kSolaxM140M340Recipes) / sizeof(kSolaxM140M340Recipes[0]));
     case kModbusMappingFroniusSunSpec203:
       return loadActiveRecipes(kFroniusSunSpec203Recipes, sizeof(kFroniusSunSpec203Recipes) / sizeof(kFroniusSunSpec203Recipes[0]));
     default:

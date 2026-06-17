@@ -1,0 +1,16 @@
+[
+  { "register": 0,     "source": "constant",                   "scale": 1,    "type": "int16",  "value": 118 },
+  { "register": 12294, "source": "voltage_l1_v",               "scale": 10,   "type": "float" },
+  { "register": 12296, "source": "voltage_l2_v",               "scale": 10,   "type": "float" },
+  { "register": 12298, "source": "voltage_l3_v",               "scale": 10,   "type": "float" },
+  { "register": 12300, "source": "current_l1_a",               "scale": 1000, "type": "float" },
+  { "register": 12302, "source": "current_l2_a",               "scale": 1000, "type": "float" },
+  { "register": 12304, "source": "current_l3_a",               "scale": 1000, "type": "float" },
+  { "register": 12306, "source": "net_power_total_kw",         "scale": 10000,"type": "float" },
+  { "register": 12308, "source": "net_power_l1_kw",            "scale": 10000,"type": "float" },
+  { "register": 12310, "source": "net_power_l2_kw",            "scale": 10000,"type": "float" },
+  { "register": 12312, "source": "net_power_l3_kw",            "scale": 10000,"type": "float" },
+  { "register": 12314, "source": "constant",                   "scale": 1,    "type": "float",  "value": 50000 },
+  { "register": 12544, "source": "energy_delivered_total_kwh", "scale": 10,   "type": "float" },
+  { "register": 12546, "source": "energy_returned_total_kwh",  "scale": 10,   "type": "float" }
+]

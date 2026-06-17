@@ -3472,6 +3472,7 @@ function initModbusMonitorControls() {
 				{ v: 4, t: "EM330" },
 				{ v: 5, t: "ABB B21" },
 				{ v: 6, t: "MX3xx" },
+				{ v: 10, t: "Solax M1/M3-40 EnergyMeter" },
 				{ v: 7, t: "Default 2 - floats" },
 				{ v: 8, t: "KLEFR / INEPRO / Webasto Unite" },
 				{ v: 9, t: "Phoenix Contact EEM-XM3xx" },
