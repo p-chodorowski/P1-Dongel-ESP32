@@ -182,6 +182,7 @@ void setup()
   DebugTf("Startup complete! actTimestamp[%s]\r\n", actTimestamp);  
   StartESPNOW();
   StartWebhook();
+  StartTapElectric();
   UdpBegin();
 } // setup()
 
@@ -207,4 +208,5 @@ void loop () {
   handleP2P();
   handleUDP();
   PostWebhook();
+  PostTapElectric();
 } // loop()

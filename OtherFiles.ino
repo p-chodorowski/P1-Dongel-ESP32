@@ -105,6 +105,10 @@ void writeSettingsDirect() {
   docw["OverVoltageThreshold"] = settingOvervoltageThreshold;
   docw["MeentInterval"] = settingMeentInterval;
   docw["MeentToken"] = settingMeentToken;
+  docw["tap-enabled"] = bTapEnabled;
+  docw["TapApiKey"] = settingTapApiKey;
+  docw["TapMeterId"] = settingTapMeterId;
+  docw["TapInterval"] = settingTapInterval;
   docw["Fuse"] = settingFuse;
   docw["Phases"] = settingPhases;
   // docw["SmHasFaseInfo"] = settingSmHasFaseInfo;
@@ -229,6 +233,12 @@ void readSettings(bool show)
     settingMeentInterval = constrain(doc["MeentInterval"].as<int>(), 1, 3600);
   }
   if (doc["MeentToken"].is<const char*>()) strlcpy(settingMeentToken, doc["MeentToken"].as<const char*>(), sizeof(settingMeentToken));
+  if (doc["tap-enabled"].is<bool>()) bTapEnabled = doc["tap-enabled"];
+  if (doc["TapApiKey"].is<const char*>()) strlcpy(settingTapApiKey, doc["TapApiKey"].as<const char*>(), sizeof(settingTapApiKey));
+  if (doc["TapMeterId"].is<const char*>()) strlcpy(settingTapMeterId, doc["TapMeterId"].as<const char*>(), sizeof(settingTapMeterId));
+  if (doc["TapInterval"].is<int>()) {
+    settingTapInterval = constrain(doc["TapInterval"].as<int>(), 1, 30);
+  }
   // settingSmHasFaseInfo = doc["SmHasFaseInfo"];
   
   if (doc["mqtt-hide"].is<bool>()) hideMQTTsettings = doc["mqtt-hide"];
@@ -326,6 +336,7 @@ void readSettings(bool show)
   
   if (settingMQTTbrokerPort    < 1) settingMQTTbrokerPort   = 1883;
   settingMeentInterval = constrain(settingMeentInterval, 1, 3600);
+  settingTapInterval = constrain(settingTapInterval, 1, 30);
 
   if (!show) return;
 
@@ -369,6 +380,9 @@ void updateSetting(const char *field, const char *newValue)
   }
   if (!stricmp(field, "meent_interval")) {
     settingMeentInterval = constrain(String(newValue).toInt(), 1, 3600);
+  }
+  if (!stricmp(field, "tap_interval")) {
+    settingTapInterval = constrain(String(newValue).toInt(), 1, 30);
   }
   if (!stricmp(field, "fuse")) {
     uint8_t newFuse = String(newValue).toInt();
@@ -463,6 +477,8 @@ void updateSetting(const char *field, const char *newValue)
   if (!stricmp(field, "b_auth_user")) strCopy(bAuthUser,25, newValue);  
   if (!stricmp(field, "b_auth_pw")) strCopy(bAuthPW,25, newValue); 
   if (!stricmp(field, "meent_token")) strCopy(settingMeentToken, sizeof(settingMeentToken), newValue);
+  if (!stricmp(field, "tap_api_key")) strCopy(settingTapApiKey, sizeof(settingTapApiKey), newValue);
+  if (!stricmp(field, "tap_meter_id")) strCopy(settingTapMeterId, sizeof(settingTapMeterId), newValue);
 
   if (!stricmp(field, "water_fact")) WtrFactor = String(newValue).toFloat(); 
   
@@ -496,6 +512,7 @@ void updateSetting(const char *field, const char *newValue)
   if (!stricmp(field, "try_calc_i")) try_calc_i = (stricmp(newValue, "true") == 0?true:false);
   if (!stricmp(field, "act-json-mqtt")) bActJsonMQTT = (stricmp(newValue, "true") == 0?true:false);  
   if (!stricmp(field, "eid-enabled")) bEID_enabled = (stricmp(newValue, "true") == 0?true:false);  
+  if (!stricmp(field, "tap-enabled")) bTapEnabled = (stricmp(newValue, "true") == 0?true:false);  
   
   #ifdef UDP_BCAST
   if (!stricmp(field, "udp")) bUDPenabled = (stricmp(newValue, "true") == 0?true:false);  

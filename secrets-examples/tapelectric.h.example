@@ -1,0 +1,6 @@
+#pragma once
+// Optional override of the Tap Electric API base URL.
+// Only needed for testing against a non-production environment; the firmware
+// defaults to "https://api.tapelectric.app" when this file is absent.
+// The API key and meter ID are configured at runtime in the WebUI settings.
+#define URL_TAPELECTRIC_BASE "https://api.tapelectric.app"

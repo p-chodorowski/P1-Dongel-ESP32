@@ -742,6 +742,7 @@ void processTelegram(){
   #ifdef UDP_BCAST
     New_P1_UDP = true;
   #endif 
+  if (bTapEnabled) bNewTelegramTap = true; // interval handling is done in PostTapElectric()
 } // processTelegram()
 
 //==================================================================================

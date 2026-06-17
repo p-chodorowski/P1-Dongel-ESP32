@@ -1,0 +1,148 @@
+/*
+***************************************************************************
+**  Program  : TapElectric, part of DSMRloggerAPI
+**  Purpose  : Push per-phase meter data to the Tap Electric platform
+**             (external meters API, e.g. for dynamic load balancing).
+**             POST https://api.tapelectric.app/api/v1/meters/{meterId}/data
+**             Auth via the X-Api-Key header. Both meter ID and API key are
+**             configured at runtime through the WebUI settings.
+***************************************************************************
+*/
+
+#if __has_include("./../../_secrets/tapelectric.h")
+  #include "./../../_secrets/tapelectric.h"
+#endif
+
+#ifndef URL_TAPELECTRIC_BASE
+  #define URL_TAPELECTRIC_BASE "https://api.tapelectric.app"
+#endif
+
+static WiFiClientSecure tapTlsClient;
+static uint8_t  tapPostErrors = 0;
+static uint32_t tapLastPostMs = 0;
+static bool     tapPostPending = false;
+
+static void tapBuildTimestamp(char* out, size_t outLen) {
+  const char* ts = (DSMRdata.timestamp_present && DSMRdata.timestamp.length() >= 12)
+                     ? DSMRdata.timestamp.c_str()
+                     : actTimestamp;
+  if (strlen(ts) < 12) {
+    strlcpy(out, ts, outLen);
+    return;
+  }
+  const char* offset = (strlen(ts) >= 13 && (ts[12] == 'S' || ts[12] == 's')) ? "+02:00" : "+01:00";
+  snprintf(out, outLen, "20%c%c-%c%c-%c%cT%c%c:%c%c:%c%c%s",
+           ts[0], ts[1], ts[2], ts[3], ts[4], ts[5],
+           ts[6], ts[7], ts[8], ts[9], ts[10], ts[11], offset);
+}
+
+String JsonTapElectric(const WorkerTapPayload& payload) {
+  JsonDocument doc;
+  doc["timestamp"] = payload.timestamp;
+  JsonObject perPhase = doc["perPhase"].to<JsonObject>();
+
+  static const char* keys[3] = { "l1", "l2", "l3" };
+  for (uint8_t i = 0; i < 3; i++) {
+    if (!(payload.phaseMask & (1 << i))) continue;
+    JsonObject phase = perPhase[keys[i]].to<JsonObject>();
+    if (payload.voltage[i]) phase["voltage"] = payload.voltage[i] / 1000.0;
+    if (payload.current[i]) phase["current"] = payload.current[i] / 1000.0;
+    phase["power"] = payload.power[i];
+  }
+
+  String output;
+  serializeJson(doc, output);
+
+#ifdef DEBUG
+  Debugf("TapElectric Json: %s\n", output.c_str());
+#endif
+
+  return output;
+}
+
+void PostTapElectric() {
+  if (!bTapEnabled || bNewTelegramTap == false) return;
+  if (netw_state == NW_NONE || tapPostErrors > 100 || tapPostPending) return;
+  if (!strlen(settingTapApiKey) || !strlen(settingTapMeterId)) return;
+
+  const uint16_t effectiveInterval = constrain(settingTapInterval, (uint16_t)1, (uint16_t)30);
+  const uint32_t intervalMs = (uint32_t)effectiveInterval * 1000UL;
+  const uint32_t nowMs = millis();
+  if (tapLastPostMs != 0 && (uint32_t)(nowMs - tapLastPostMs) < intervalMs) return;
+
+  WorkerTapPayload payload = {};
+  tapBuildTimestamp(payload.timestamp, sizeof(payload.timestamp));
+
+  // L1 is always sent; fall back to the aggregate power when a meter does not
+  // report per-phase power (typical for single-phase meters).
+  if (DSMRdata.power_delivered_l1_present || DSMRdata.power_returned_l1_present) {
+    payload.power[0] = DSMRdata.power_delivered_l1.int_val() - DSMRdata.power_returned_l1.int_val();
+  } else {
+    payload.power[0] = DSMRdata.power_delivered.int_val() - DSMRdata.power_returned.int_val();
+  }
+  if (DSMRdata.voltage_l1_present) payload.voltage[0] = DSMRdata.voltage_l1.int_val();
+  if (DSMRdata.current_l1_present) payload.current[0] = DSMRdata.current_l1.int_val();
+  payload.phaseMask = 0x01;
+
+  if (DSMRdata.voltage_l2_present || DSMRdata.power_delivered_l2_present) {
+    payload.power[1] = DSMRdata.power_delivered_l2.int_val() - DSMRdata.power_returned_l2.int_val();
+    if (DSMRdata.voltage_l2_present) payload.voltage[1] = DSMRdata.voltage_l2.int_val();
+    if (DSMRdata.current_l2_present) payload.current[1] = DSMRdata.current_l2.int_val();
+    payload.phaseMask |= 0x02;
+  }
+  if (DSMRdata.voltage_l3_present || DSMRdata.power_delivered_l3_present) {
+    payload.power[2] = DSMRdata.power_delivered_l3.int_val() - DSMRdata.power_returned_l3.int_val();
+    if (DSMRdata.voltage_l3_present) payload.voltage[2] = DSMRdata.voltage_l3.int_val();
+    if (DSMRdata.current_l3_present) payload.current[2] = DSMRdata.current_l3.int_val();
+    payload.phaseMask |= 0x04;
+  }
+
+  if (!WorkerEnqueueTapPost(payload)) return;
+
+  bNewTelegramTap = false;
+  tapPostPending = true;
+}
+
+void PostTapElectricFromWorker(const WorkerTapPayload& payload) {
+  if (netw_state == NW_NONE || tapPostErrors > 100) {
+    tapPostPending = false;
+    return;
+  }
+  if (!strlen(settingTapApiKey) || !strlen(settingTapMeterId)) {
+    tapPostPending = false;
+    return;
+  }
+
+  String url = String(URL_TAPELECTRIC_BASE) + "/api/v1/meters/" + settingTapMeterId + "/data";
+
+  HTTPClient http;
+  if (http.begin(tapTlsClient, url)) {
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-Api-Key", settingTapApiKey);
+
+    int httpResponseCode = http.POST(JsonTapElectric(payload));
+    DebugT(F("TapElectric HTTP Response code: ")); Debugln(httpResponseCode);
+
+    if (httpResponseCode >= 200 && httpResponseCode < 300) {
+      tapPostErrors = 0;
+      tapLastPostMs = millis();
+    } else {
+      tapPostErrors++;
+      tapTlsClient.stop();
+      delay(10);
+    }
+    http.end();
+  } else {
+    tapPostErrors++;
+    DebugTln(F("TapElectric HTTP begin failed"));
+    tapTlsClient.stop();
+    delay(10);
+  }
+
+  tapPostPending = false;
+}
+
+void StartTapElectric() {
+  tapTlsClient.setInsecure();
+  tapTlsClient.setTimeout(5000);
+}

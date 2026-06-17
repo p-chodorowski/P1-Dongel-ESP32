@@ -15,6 +15,7 @@ That resolves (relative to this project) to a sibling folder outside the repo. T
 1. `../../_secrets/posts.h`
 2. `../../_secrets/energyid.h`
 3. `../../_secrets/direct_ap.h`
+4. `../../_secrets/tapelectric.h` (optional)
 
 The code now compiles without them (safe defaults are provided), but if you want the related features you should create them.
 
@@ -80,7 +81,31 @@ Notes:
 - `DIRECT_AP_TARGET_SERIAL` can be left empty to connect to the strongest matching AP.
 - `DIRECT_AP_OTAURL_PREFIX` is used when `DIRECT_AP_CONNECT` is enabled, unless `OTAURL_PREFIX` is explicitly defined elsewhere.
 
-## 5) Profile selection
+## 5) Tap Electric meter push (optional)
+
+Tap Electric is a runtime feature: there is no compile-time flag. Enable it and
+configure it entirely from the WebUI Settings tab:
+
+- `Tap Electric push` (on/off)
+- `Tap Electric API key` (sent as the `X-Api-Key` header)
+- `Tap Electric meter ID` (used in the request path)
+- `Send Tap Electric data (sec.)` (interval, 1-30 s)
+
+When enabled with a valid API key and meter ID, the dongle posts per-phase
+meter data to `POST https://api.tapelectric.app/api/v1/meters/{meterId}/data`
+off the realtime path via the worker queue.
+
+The base URL can optionally be overridden for testing by creating
+`../../_secrets/tapelectric.h`:
+
+```cpp
+#pragma once
+
+// Defaults to "https://api.tapelectric.app" when this file is absent.
+#define URL_TAPELECTRIC_BASE "https://api.tapelectric.app"
+```
+
+## 6) Profile selection
 
 Do not hardcode hardware profile defines in `P1-Dongel-ESP32.ino` when using `build.sh`.
 
@@ -90,7 +115,7 @@ Use `build.sh` to compile all profiles. It injects profile-specific defines and 
 - ESP32-S3 builds must always use the 8MB partition scheme (`FlashSize=8M`, `PartitionScheme=default_8MB`, OTA 3MB / matching 8MB layout).
 - `ULTRA` -> `ESP32S3`, `FlashSize=8M`, `PartitionScheme=default_8MB`
 
-## 6) Libraries used by this project
+## 7) Libraries used by this project
 
 The codebase uses a mix of libraries from the ESP32 Arduino core and a small set of external libraries that must be installed separately.
 

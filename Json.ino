@@ -581,6 +581,9 @@ if ( !hideMQTTsettings) {
   ADD_SETTING("meent_interval", "i", 1, 3600, settingMeentInterval);
   ADD_SETTING("meent_token", "s", 0, sizeof(settingMeentToken) - 1, settingMeentToken);
 #endif
+  ADD_SETTING("tap_api_key", "s", 0, sizeof(settingTapApiKey) - 1, settingTapApiKey);
+  ADD_SETTING("tap_meter_id", "s", 0, sizeof(settingTapMeterId) - 1, settingTapMeterId);
+  ADD_SETTING("tap_interval", "i", 1, 30, settingTapInterval);
   
   //MODBUS TCP settings
     ADD_SETTING("mb_map", "i", 0, 15, SelMap); //RTU+TCP
@@ -600,6 +603,7 @@ if ( !hideMQTTsettings) {
   doc["try_calc_i"] = try_calc_i;
   doc["eid-enabled"] = bEID_enabled;
   doc["eid-planner"] = StroomPlanData.size() > 0 ? true : false;
+  doc["tap-enabled"] = bTapEnabled;
   doc["nrgm-enabled"] = bNRGMenabled;
   #ifdef NETSWITCH
   doc["netsw-enabled"] = bNETSWenabled;

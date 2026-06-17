@@ -31,6 +31,7 @@ void P1StatusWriteDirect();
 void writeSettingsDirect();
 void ManifestCheckFromWorker();
 void PostWebhookFromWorker(const WorkerWebhookPayload& payload);
+void PostTapElectricFromWorker(const WorkerTapPayload& payload);
 void RngWriteFromWorker(const WorkerRngPayload& payload);
 void GetSolarDataNFromWorker();
 
@@ -141,6 +142,10 @@ static void workerHandleJob(const WorkerJob& job) {
 
     case WORKER_JOB_HTTP_POST:
       PostWebhookFromWorker(job.data.webhook);
+      break;
+
+    case WORKER_JOB_TAP_POST:
+      PostTapElectricFromWorker(job.data.tap);
       break;
 
     case WORKER_JOB_RNG_WRITE:
@@ -257,6 +262,14 @@ bool WorkerEnqueueWebhookPost(const WorkerWebhookPayload& payload) {
 
   WorkerJob job = workerJob(WORKER_JOB_HTTP_POST);
   job.data.webhook = payload;
+  return WorkerEnqueue(job, WORKER_PRIO_NORMAL, 0);
+}
+
+bool WorkerEnqueueTapPost(const WorkerTapPayload& payload) {
+  if (!tWorker || !qWorkerNormal) return false;
+
+  WorkerJob job = workerJob(WORKER_JOB_TAP_POST);
+  job.data.tap = payload;
   return WorkerEnqueue(job, WORKER_PRIO_NORMAL, 0);
 }
 

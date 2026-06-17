@@ -31,7 +31,8 @@ enum WorkerJobType : uint8_t {
   WORKER_JOB_RNG_WRITE,
   WORKER_JOB_HTTP_POST,
   WORKER_JOB_MANIFEST_CHECK,
-  WORKER_JOB_SOLAR_FETCH
+  WORKER_JOB_SOLAR_FETCH,
+  WORKER_JOB_TAP_POST
 };
 
 struct WorkerLogPayload {
@@ -44,6 +45,14 @@ struct WorkerWebhookPayload {
   int32_t pFromGrid;
   int32_t pToGrid;
   time_t timestamp;
+};
+
+struct WorkerTapPayload {
+  char timestamp[28];   // ISO-8601 e.g. 2026-06-17T14:30:00+02:00
+  int32_t power[3];     // watt, net per phase (positive=consumption)
+  int32_t voltage[3];   // millivolt per phase (0 = not reported)
+  int32_t current[3];   // milliampere per phase (0 = not reported)
+  uint8_t phaseMask;    // bit0=l1, bit1=l2, bit2=l3
 };
 
 struct WorkerRngPayload {
@@ -61,6 +70,7 @@ struct WorkerJob {
   union {
     WorkerLogPayload log;
     WorkerWebhookPayload webhook;
+    WorkerTapPayload tap;
     WorkerRngPayload rng;
     uint8_t raw[112];
   } data;
@@ -72,6 +82,7 @@ bool WorkerEnqueueSimple(WorkerJobType type, WorkerPriority priority);
 bool WorkerHasCapacity(WorkerPriority priority, uint8_t needed);
 bool WorkerEnqueueLog(const char* payload, bool toDebug);
 bool WorkerEnqueueWebhookPost(const WorkerWebhookPayload& payload);
+bool WorkerEnqueueTapPost(const WorkerTapPayload& payload);
 bool WorkerEnqueueRngWrite(const WorkerRngPayload& payload);
 bool WorkerEnqueueSolarFetch();
 void WorkerNotifyP1TelegramOk();
