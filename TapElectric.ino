@@ -22,6 +22,57 @@ static uint8_t  tapPostErrors = 0;
 static uint32_t tapLastPostMs = 0;
 static bool     tapPostPending = false;
 
+static constexpr size_t kTapMonitorCapacity = 30;
+static constexpr size_t kTapMonitorBodyMax = 384;
+
+struct TapMonitorEntry {
+  char timestamp[20];
+  char body[kTapMonitorBodyMax];
+  int16_t httpStatus;  // -1 = connection/begin failed
+};
+
+static TapMonitorEntry g_tapMonitorEntries[kTapMonitorCapacity];
+static size_t g_tapMonitorCount = 0;
+static size_t g_tapMonitorHead = 0;
+
+void logTapMonitorEntry(const char* body, int16_t httpStatus) {
+  if (!bTapMonitor) return;
+
+  TapMonitorEntry& entry = g_tapMonitorEntries[g_tapMonitorHead];
+  strlcpy(entry.timestamp, actTimestamp, sizeof(entry.timestamp));
+  strlcpy(entry.body, body, sizeof(entry.body));
+  entry.httpStatus = httpStatus;
+
+  g_tapMonitorHead = (g_tapMonitorHead + 1) % kTapMonitorCapacity;
+  if (g_tapMonitorCount < kTapMonitorCapacity) g_tapMonitorCount++;
+}
+
+String tapMonitorJson() {
+  JsonDocument doc;
+  doc["enabled"] = bTapMonitor;
+  doc["capacity"] = kTapMonitorCapacity;
+  doc["count"] = g_tapMonitorCount;
+
+  JsonArray data = doc["data"].to<JsonArray>();
+  for (size_t i = 0; i < g_tapMonitorCount; i++) {
+    const size_t index = (g_tapMonitorHead + kTapMonitorCapacity - 1 - i) % kTapMonitorCapacity;
+    const TapMonitorEntry& entry = g_tapMonitorEntries[index];
+    JsonObject row = data.add<JsonObject>();
+    row["timestamp"] = entry.timestamp;
+    row["body"] = entry.body;
+    row["status"] = entry.httpStatus;
+  }
+
+  String body;
+  serializeJson(doc, body);
+  return body;
+}
+
+void clearTapMonitorEntries() {
+  g_tapMonitorCount = 0;
+  g_tapMonitorHead = 0;
+}
+
 static void tapBuildTimestamp(char* out, size_t outLen) {
   const char* ts = (DSMRdata.timestamp_present && DSMRdata.timestamp.length() >= 12)
                      ? DSMRdata.timestamp.c_str()
@@ -114,14 +165,16 @@ void PostTapElectricFromWorker(const WorkerTapPayload& payload) {
   }
 
   String url = String(URL_TAPELECTRIC_BASE) + "/api/v1/meters/" + settingTapMeterId + "/data";
+  String jsonBody = JsonTapElectric(payload);
 
   HTTPClient http;
   if (http.begin(tapTlsClient, url)) {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("X-Api-Key", settingTapApiKey);
 
-    int httpResponseCode = http.POST(JsonTapElectric(payload));
+    int httpResponseCode = http.POST(jsonBody);
     DebugT(F("TapElectric HTTP Response code: ")); Debugln(httpResponseCode);
+    logTapMonitorEntry(jsonBody.c_str(), httpResponseCode);
 
     if (httpResponseCode >= 200 && httpResponseCode < 300) {
       tapPostErrors = 0;
@@ -135,6 +188,7 @@ void PostTapElectricFromWorker(const WorkerTapPayload& payload) {
   } else {
     tapPostErrors++;
     DebugTln(F("TapElectric HTTP begin failed"));
+    logTapMonitorEntry(jsonBody.c_str(), -1);
     tapTlsClient.stop();
     delay(10);
   }

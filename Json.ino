@@ -584,6 +584,7 @@ if ( !hideMQTTsettings) {
   ADD_SETTING("tap_api_key", "s", 0, sizeof(settingTapApiKey) - 1, settingTapApiKey);
   ADD_SETTING("tap_meter_id", "s", 0, sizeof(settingTapMeterId) - 1, settingTapMeterId);
   ADD_SETTING("tap_interval", "i", 1, 30, settingTapInterval);
+  doc["tap_monitor"] = bTapMonitor;
   
   //MODBUS TCP settings
     ADD_SETTING("mb_map", "i", 0, 15, SelMap); //RTU+TCP
@@ -838,6 +839,17 @@ ApiResponse handleModbusMonitorApi(const ApiRequestContext& request) {
   }
 
   return jsonOkResponse(modbusMonitorJson());
+}
+
+ApiResponse handleTapMonitorApi(const ApiRequestContext& request) {
+  if (request.method == HTTP_POST) {
+    clearTapMonitorEntries();
+    JsonDocument doc;
+    doc["cleared"] = true;
+    return jsonDocResponse(doc);
+  }
+
+  return jsonOkResponse(tapMonitorJson());
 }
 
 bool isInFieldsArray(const char* lookUp)

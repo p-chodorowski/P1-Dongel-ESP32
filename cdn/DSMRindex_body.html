@@ -669,7 +669,39 @@
 			</div>
 		  </div>
 		</div>
-		<div id="settings_tapelectric" class="settings-pane"></div>
+		<div id="settings_tapelectric" class="settings-pane">
+		  <div id="tap_monitor_card" class="settings-card" style="display:none">
+			<div class="settings-card-header">
+			  <h3 data-i18n-key="tap-monitor-title">Tap Electric monitor</h3>
+			  <p data-i18n-key="tap-monitor-desc">Logt de laatste 30 Tap Electric POST requests zodat zichtbaar is wat er verstuurd wordt en welke HTTP-status terugkomt.</p>
+			</div>
+			<div class="settings-card-toggle">
+			  <label class="checkbox-row" for="tap_monitor_toggle">
+				<input type="checkbox" id="tap_monitor_toggle">
+				<span data-i18n-key="tap-monitor-enable">Tap Electric monitor inschakelen</span>
+			  </label>
+			</div>
+			<div id="tap_monitor_body" style="display:none">
+			  <div class="settings-card-actions">
+				<a id="tap_monitor_refresh" class="btn" href="#" data-i18n-key="btn-refresh">Verversen</a>
+				<a id="tap_monitor_clear" class="btn" href="#" data-i18n-key="btn-clear">Wissen</a>
+			  </div>
+			  <p id="tap_monitor_empty" class="settings-help" data-i18n-key="tap-monitor-empty">Nog geen Tap Electric requests verstuurd</p>
+			  <div id="tap_monitor_table_wrap" style="display:none">
+				<table id="tap_monitor_table">
+				  <thead>
+					<tr>
+					  <th data-i18n-key="tap-monitor-col-time">Tijd</th>
+					  <th data-i18n-key="tap-monitor-col-sent">Verstuurd</th>
+					  <th data-i18n-key="tap-monitor-col-status">Status</th>
+					</tr>
+				  </thead>
+				  <tbody></tbody>
+				</table>
+			  </div>
+			</div>
+		  </div>
+		</div>
 	
 	  </div>
    </div>

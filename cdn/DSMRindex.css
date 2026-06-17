@@ -1141,6 +1141,17 @@ select#languageSelector {background-color: unset; color: #fff; border: none;colo
   text-transform: capitalize;
 }
 
+#tap_monitor_table th,
+#tap_monitor_table td{
+  text-align: left;
+  padding: 8px 10px;
+}
+
+#tap_monitor_table td:nth-child(2){
+  font-family: monospace;
+  word-break: break-all;
+}
+
 
 /* input wrapper */
 /* 

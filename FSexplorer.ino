@@ -176,6 +176,14 @@ void setupFSexplorer() {
     if (!auth()) return;
     sendApiResponse(handleModbusMonitorApi(currentApiRequest()));
   });
+  httpServer.on("/api/v2/tapelectric/monitor", HTTP_GET, []() {
+    if (!auth()) return;
+    sendApiResponse(handleTapMonitorApi(currentApiRequest()));
+  });
+  httpServer.on("/api/v2/tapelectric/monitor", HTTP_POST, []() {
+    if (!auth()) return;
+    sendApiResponse(handleTapMonitorApi(currentApiRequest()));
+  });
 
   httpServer.on("/eid/getclaim", []() {
     if (!auth()) return;

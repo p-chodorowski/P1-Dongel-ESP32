@@ -3204,6 +3204,7 @@ function initSettingsSubTabsOnce() {
       const pane = document.getElementById(targetId);
       if (pane) pane.classList.add("active");
       if (targetId === "settings_modbus") refreshModbusMonitorView();
+      if (targetId === "settings_tapelectric") refreshTapMonitorView();
     });
   });
 }
@@ -3290,6 +3291,8 @@ function splitSettingsUI() {
   if (modbusMonitorCard) modbus.appendChild(modbusMonitorCard);
   const tapToggleRow = document.getElementById("settingR_tap-enabled");
   if (tapToggleRow) tapelectric.prepend(tapToggleRow);
+  const tapMonitorCard = document.getElementById("tap_monitor_card");
+  if (tapMonitorCard) tapelectric.appendChild(tapMonitorCard);
   updateMQTTSettingsVisibility();
   updateTapSettingsVisibility();
 }
@@ -3454,6 +3457,124 @@ function initModbusMonitorControls() {
     });
   }
 }
+
+function getTapMonitorEnabled() {
+  const setting = objDAL?.dev_settings?.tap_monitor;
+  if (typeof setting === "boolean") return setting;
+  if (setting && typeof setting === "object" && "value" in setting) return !!setting.value;
+  return null;
+}
+
+function formatTapMonitorStatus(status) {
+  if (status === -1) return t("tap-monitor-status-failed");
+  return status;
+}
+
+function renderTapMonitorData(json) {
+  const body = document.getElementById("tap_monitor_body");
+  const empty = document.getElementById("tap_monitor_empty");
+  const wrap = document.getElementById("tap_monitor_table_wrap");
+  const tbody = document.querySelector("#tap_monitor_table tbody");
+  if (!body || !empty || !wrap || !tbody) return;
+
+  if (!json?.enabled) {
+    body.style.display = "none";
+    wrap.style.display = "none";
+    empty.style.display = "";
+    tbody.innerHTML = "";
+    return;
+  }
+
+  body.style.display = "";
+  tbody.innerHTML = "";
+
+  const rows = Array.isArray(json.data) ? json.data : [];
+  if (rows.length === 0) {
+    wrap.style.display = "none";
+    empty.style.display = "";
+    return;
+  }
+
+  empty.style.display = "none";
+  wrap.style.display = "";
+
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    [
+      row.timestamp ? formatTimestamp(row.timestamp) : "-",
+      row.body ?? "-",
+      formatTapMonitorStatus(row.status)
+    ].forEach(value => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      tr.appendChild(cell);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function refreshTapMonitorData() {
+  const enabled = getTapMonitorEnabled();
+  if (!enabled) {
+    renderTapMonitorData({ enabled: false, data: [] });
+    return;
+  }
+
+  fetch("/api/v2/tapelectric/monitor")
+    .then(response => response.json())
+    .then(json => renderTapMonitorData(json))
+    .catch(error => console.error("refreshTapMonitorData()", error));
+}
+
+function refreshTapMonitorView() {
+  const card = document.getElementById("tap_monitor_card");
+  const toggle = document.getElementById("tap_monitor_toggle");
+  const enabled = getTapMonitorEnabled();
+  if (!card || !toggle) return;
+
+  if (enabled === null) {
+    card.style.display = "none";
+    return;
+  }
+
+  card.style.display = "";
+  toggle.checked = enabled;
+  renderTapMonitorData({ enabled, data: [] });
+  if (enabled) refreshTapMonitorData();
+}
+
+function initTapMonitorControls() {
+  const toggle = document.getElementById("tap_monitor_toggle");
+  const refreshBtn = document.getElementById("tap_monitor_refresh");
+  const clearBtn = document.getElementById("tap_monitor_clear");
+
+  if (toggle && !toggle.dataset.bound) {
+    toggle.dataset.bound = "1";
+    toggle.addEventListener("change", () => {
+      sendPostSetting("tap_monitor", toggle.checked);
+      if (objDAL?.dev_settings) objDAL.dev_settings.tap_monitor = toggle.checked;
+      refreshTapMonitorView();
+    });
+  }
+
+  if (refreshBtn && !refreshBtn.dataset.bound) {
+    refreshBtn.dataset.bound = "1";
+    refreshBtn.addEventListener("click", event => {
+      event.preventDefault();
+      refreshTapMonitorData();
+    });
+  }
+
+  if (clearBtn && !clearBtn.dataset.bound) {
+    clearBtn.dataset.bound = "1";
+    clearBtn.addEventListener("click", event => {
+      event.preventDefault();
+      fetch("/api/v2/tapelectric/monitor", { method: "POST" })
+        .then(() => refreshTapMonitorData())
+        .catch(error => console.error("clear tap monitor", error));
+    });
+  }
+}
   
   //============================================================================  
   function refreshSettings()
@@ -3465,6 +3586,7 @@ function initModbusMonitorControls() {
 	{
 	  if ( i == "conf") continue;
 	  if ( i == "mb_monitor") continue;
+	  if ( i == "tap_monitor") continue;
 	  console.log("["+i+"]=>["+data[i].value+"]");
 	  let settings = document.getElementById('settings_table');
 	  if( ( document.getElementById("settingR_"+i)) == null )
@@ -3704,6 +3826,8 @@ function initModbusMonitorControls() {
   updateBrowserSettingsControls();
   initModbusMonitorControls();
   refreshModbusMonitorView();
+  initTapMonitorControls();
+  refreshTapMonitorView();
 
       
   } // refreshSettings()

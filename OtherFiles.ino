@@ -109,6 +109,7 @@ void writeSettingsDirect() {
   docw["TapApiKey"] = settingTapApiKey;
   docw["TapMeterId"] = settingTapMeterId;
   docw["TapInterval"] = settingTapInterval;
+  docw["tap_monitor"] = bTapMonitor;
   docw["Fuse"] = settingFuse;
   docw["Phases"] = settingPhases;
   // docw["SmHasFaseInfo"] = settingSmHasFaseInfo;
@@ -239,6 +240,7 @@ void readSettings(bool show)
   if (doc["TapInterval"].is<int>()) {
     settingTapInterval = constrain(doc["TapInterval"].as<int>(), 1, 30);
   }
+  if (doc["tap_monitor"].is<bool>()) bTapMonitor = doc["tap_monitor"];
   // settingSmHasFaseInfo = doc["SmHasFaseInfo"];
   
   if (doc["mqtt-hide"].is<bool>()) hideMQTTsettings = doc["mqtt-hide"];
@@ -512,7 +514,8 @@ void updateSetting(const char *field, const char *newValue)
   if (!stricmp(field, "try_calc_i")) try_calc_i = (stricmp(newValue, "true") == 0?true:false);
   if (!stricmp(field, "act-json-mqtt")) bActJsonMQTT = (stricmp(newValue, "true") == 0?true:false);  
   if (!stricmp(field, "eid-enabled")) bEID_enabled = (stricmp(newValue, "true") == 0?true:false);  
-  if (!stricmp(field, "tap-enabled")) bTapEnabled = (stricmp(newValue, "true") == 0?true:false);  
+  if (!stricmp(field, "tap-enabled")) bTapEnabled = (stricmp(newValue, "true") == 0?true:false);
+  if (!stricmp(field, "tap_monitor")) bTapMonitor = (stricmp(newValue, "true") == 0?true:false);  
   
   #ifdef UDP_BCAST
   if (!stricmp(field, "udp")) bUDPenabled = (stricmp(newValue, "true") == 0?true:false);  
