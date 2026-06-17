@@ -3214,8 +3214,9 @@ function splitSettingsUI() {
   const tariff  = document.getElementById("settings_tariff");
   const mqtt    = document.getElementById("settings_mqtt");
   const modbus  = document.getElementById("settings_modbus");
+  const tapelectric = document.getElementById("settings_tapelectric");
 
-  if ( !table || !general || !mqtt || !modbus || !tariff ) return;
+  if ( !table || !general || !mqtt || !modbus || !tariff || !tapelectric ) return;
 
   // velden op basis van "i" (dus zonder "settingR_")
   const MQTT_KEYS = new Set([
@@ -3261,6 +3262,13 @@ function splitSettingsUI() {
     "modbus_stop"
   ]);
 
+  const TAP_KEYS = new Set([
+    "tap-enabled",
+    "tap_api_key",
+    "tap_meter_id",
+    "tap_interval"
+  ]);
+
   // alle bestaande rows (waar ze ook al staan) opnieuw indelen
   const rows = Array.from(document.querySelectorAll("#Settings .settingDiv"));
 
@@ -3272,6 +3280,7 @@ function splitSettingsUI() {
     if (MQTT_KEYS.has(key)) mqtt.appendChild(row);
     else if (TARIFF_KEYS.has(key)) tariff.appendChild(row);
     else if (MODBUS_KEYS.has(key)) modbus.appendChild(row);
+    else if (TAP_KEYS.has(key)) tapelectric.appendChild(row);
     else general.appendChild(row);
   });
 
@@ -3279,7 +3288,10 @@ function splitSettingsUI() {
   if (mqttToggleRow) mqtt.prepend(mqttToggleRow);
   const modbusMonitorCard = document.getElementById("modbus_monitor_card");
   if (modbusMonitorCard) modbus.appendChild(modbusMonitorCard);
+  const tapToggleRow = document.getElementById("settingR_tap-enabled");
+  if (tapToggleRow) tapelectric.prepend(tapToggleRow);
   updateMQTTSettingsVisibility();
+  updateTapSettingsVisibility();
 }
 
 function updateMQTTSettingsVisibility() {
@@ -3291,6 +3303,18 @@ function updateMQTTSettingsVisibility() {
   mqttPane.querySelectorAll(".settingDiv").forEach(row => {
     if (row.id === "settingR_mqtt_enabled") return;
     row.style.display = showMQTTFields ? "" : "none";
+  });
+}
+
+function updateTapSettingsVisibility() {
+  const tapEnabled = document.getElementById("setFld_tap-enabled");
+  const tapPane = document.getElementById("settings_tapelectric");
+  if (!tapEnabled || !tapPane) return;
+
+  const showTapFields = tapEnabled.checked;
+  tapPane.querySelectorAll(".settingDiv").forEach(row => {
+    if (row.id === "settingR_tap-enabled") return;
+    row.style.display = showTapFields ? "" : "none";
   });
 }
 
@@ -3653,6 +3677,9 @@ function initModbusMonitorControls() {
 			sInput.addEventListener("input",  () => markDirty(sInput));
 			if (i === "mqtt_enabled") {
 			  sInput.addEventListener("change", updateMQTTSettingsVisibility);
+			}
+			if (i === "tap-enabled") {
+			  sInput.addEventListener("change", updateTapSettingsVisibility);
 			}
 			
 			inputDiv.appendChild(sInput);

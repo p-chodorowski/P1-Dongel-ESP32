@@ -1163,6 +1163,13 @@ select#languageSelector {background-color: unset; color: #fff; border: none;colo
   background: #fff;
 }
 
+/* Tap Electric API key: long token, use full width and monospace */
+#Settings #setFld_tap_api_key{
+  max-width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
 /* mobiel */
 @media (max-width: 640px){
   #Settings .settingDiv{ grid-template-columns: 1fr; }

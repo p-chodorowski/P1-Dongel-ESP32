@@ -34,6 +34,7 @@
   "setting-general": "General",
   "setting-mqtt": "Mqtt",
   "setting-modbus": "Modbus",
+  "setting-tapelectric": "Tap Electric",
   "mimic-disabled": "Disabled",
   "dict_hardware": "Hardware typ",
   "lbl-beta-fwversion": "Beta mjukvara",

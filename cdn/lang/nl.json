@@ -39,6 +39,7 @@
   "setting-general": "Algemeen",
   "setting-mqtt": "Mqtt",
   "setting-modbus": "Modbus",
+  "setting-tapelectric": "Tap Electric",
   "mimic-disabled": "Uit",
   "dict_eid-planner": "EnergyID Stroomplanner",
   "lbl_update_wait": "Wait on reboot...",
