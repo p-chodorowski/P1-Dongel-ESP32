@@ -35,6 +35,7 @@
   "setting-general": "General",
   "setting-mqtt": "Mqtt",
   "setting-modbus": "Modbus",
+  "setting-tapelectric": "Tap Electric",
   "mimic-disabled": "Disabled",
   "lbl-beta-fwversion": "Beta Firmware",
   "lbl-install": "Installieren",
