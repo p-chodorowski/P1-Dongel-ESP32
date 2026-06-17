@@ -111,28 +111,64 @@ The web UI is not served from the device; the device only caches a small index
 shell (`/DSMRindexEDGE.html`) on LittleFS and pulls the rest of the frontend
 (`DSMRindex.js`, `DSMRindex_body.html`, language files, CSS) from jsDelivr.
 
-The CDN location is defined in two places that must stay in sync:
+The CDN ref is defined in four places that must stay in sync:
 
 - Firmware index download: `CDN_FORK_REPO` / `CDN_FORK_REF` in `Config.h`
   (used to build `PATH_DATA_FILES`).
 - Browser asset loading: `CDN_REPO` / `CDN_REF` in `cdn/cdn-config.js`
   (used to build `CDN_BASE`, which `DSMRindex.js` uses for language files).
+- The flashed index shell `data/DSMRindexEDGE.html` (all asset `<script>`/`<link>`
+  URLs and the `readPageBody()` body fetch).
+- The hardcoded language-URL fallback in `cdn/DSMRindex.js` (used only when
+  `CDN_BASE` is unset).
 
-Both currently point at `p-chodorowski/P1-Dongel-ESP32@main`.
+All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.4`.
 
-To develop against your fork:
+### Branching model
 
-1. Set the fork repo/ref in both `Config.h` and `cdn/cdn-config.js`.
-2. Push your `cdn/` and `data/DSMRindexEDGE.html` changes to the **public**
-   GitHub fork (jsDelivr only serves public repos).
-3. On the device, delete the cached `/DSMRindexEDGE.html` (via the file manager
+This fork uses a single integration branch, `main`. Feature work lands on
+`main`; each shipped frontend is identified by an immutable Git tag matching the
+firmware version in `version.h`.
+
+Do **not** point devices at a floating branch ref such as `@main`. jsDelivr
+caches mutable refs aggressively, so `@main` can serve stale assets (a stale
+`@main` once shipped a `DSMRindex.js` without `TAP_KEYS`, which dropped the Tap
+Electric fields into the wrong settings tab). Always pin to a tag.
+
+### Releasing a new frontend
+
+1. Land all `cdn/` and `data/DSMRindexEDGE.html` changes on `main` and bump
+   `version.h` (e.g. `5.8.5`).
+2. Set the new version in all four locations above (`CDN_FORK_REF`, `CDN_REF`,
+   every `@<ver>` URL in `data/DSMRindexEDGE.html`, and the fallback in
+   `cdn/DSMRindex.js`).
+3. Commit, then tag and push to the **public** GitHub fork (jsDelivr only serves
+   public repos):
+
+   ```bash
+   git tag 5.8.5
+   git push origin main 5.8.5
+   ```
+
+4. Verify jsDelivr is serving the pinned tag before flashing. Open the assets
+   directly and confirm the expected content is present:
+
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.5/cdn/DSMRindex.js`
+     should contain `TAP_KEYS`.
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.5/cdn/DSMRindex_body.html`
+     should contain `settings_tapelectric`.
+
+5. On the device, delete the cached `/DSMRindexEDGE.html` (via the file manager
    or telnet) and reboot. `EnsureIndexFilePresent()` in `FS.ino` only
    re-downloads the index when it is missing, so an old cached shell will keep
    loading until you remove it.
-4. Hard-refresh the browser (Ctrl+F5) to bypass the browser cache.
-5. jsDelivr caches branch content for a few minutes; verify a push is live by
-   opening a file directly, e.g.
-   `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@main/cdn/lang/en.json`.
+6. Hard-refresh the browser (Ctrl+Shift+R / Ctrl+F5) to bypass the browser
+   cache. In the Settings panel, the Tap Electric tab should render four fields;
+   `document.querySelectorAll('#settings_tapelectric .settingDiv').length`
+   returns `4` in the browser console.
+
+Because tags are immutable, a given tag URL is fetched and cached by jsDelivr
+once and never goes stale, so no purge step is needed.
 
 Note: device settings fields (including Tap Electric) come from firmware via
 `/api/v2/dev/settings`, not from the CDN. The CDN only provides the JavaScript
