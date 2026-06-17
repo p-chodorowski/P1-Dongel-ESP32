@@ -7,8 +7,9 @@
 // Fork frontend CDN (public repo required for jsDelivr). Switch CDN_FORK_REF to
 // P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "." P1_STR(_VERSION_PATCH)
 // after tagging each release (git tag 5.8.4 && git push origin 5.8.4).
+// Keep CDN_FORK_REPO / CDN_FORK_REF in sync with cdn/cdn-config.js (CDN_REPO / CDN_REF).
 #define CDN_FORK_REPO       "p-chodorowski/P1-Dongel-ESP32"
-#define CDN_FORK_REF        "solax_energy_meters"
+#define CDN_FORK_REF        "main"
 #define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/" CDN_FORK_REPO "@" CDN_FORK_REF "/data"
 #define URL_INDEX_FALLBACK  "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@latest/data"
 

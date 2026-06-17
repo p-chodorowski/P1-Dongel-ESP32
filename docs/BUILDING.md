@@ -105,7 +105,40 @@ The base URL can optionally be overridden for testing by creating
 #define URL_TAPELECTRIC_BASE "https://api.tapelectric.app"
 ```
 
-## 6) Profile selection
+## 6) Frontend CDN (fork development)
+
+The web UI is not served from the device; the device only caches a small index
+shell (`/DSMRindexEDGE.html`) on LittleFS and pulls the rest of the frontend
+(`DSMRindex.js`, `DSMRindex_body.html`, language files, CSS) from jsDelivr.
+
+The CDN location is defined in two places that must stay in sync:
+
+- Firmware index download: `CDN_FORK_REPO` / `CDN_FORK_REF` in `Config.h`
+  (used to build `PATH_DATA_FILES`).
+- Browser asset loading: `CDN_REPO` / `CDN_REF` in `cdn/cdn-config.js`
+  (used to build `CDN_BASE`, which `DSMRindex.js` uses for language files).
+
+Both currently point at `p-chodorowski/P1-Dongel-ESP32@main`.
+
+To develop against your fork:
+
+1. Set the fork repo/ref in both `Config.h` and `cdn/cdn-config.js`.
+2. Push your `cdn/` and `data/DSMRindexEDGE.html` changes to the **public**
+   GitHub fork (jsDelivr only serves public repos).
+3. On the device, delete the cached `/DSMRindexEDGE.html` (via the file manager
+   or telnet) and reboot. `EnsureIndexFilePresent()` in `FS.ino` only
+   re-downloads the index when it is missing, so an old cached shell will keep
+   loading until you remove it.
+4. Hard-refresh the browser (Ctrl+F5) to bypass the browser cache.
+5. jsDelivr caches branch content for a few minutes; verify a push is live by
+   opening a file directly, e.g.
+   `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@main/cdn/lang/en.json`.
+
+Note: device settings fields (including Tap Electric) come from firmware via
+`/api/v2/dev/settings`, not from the CDN. The CDN only provides the JavaScript
+and translated labels; new settings still require a firmware flash.
+
+## 7) Profile selection
 
 Do not hardcode hardware profile defines in `P1-Dongel-ESP32.ino` when using `build.sh`.
 
@@ -115,7 +148,7 @@ Use `build.sh` to compile all profiles. It injects profile-specific defines and 
 - ESP32-S3 builds must always use the 8MB partition scheme (`FlashSize=8M`, `PartitionScheme=default_8MB`, OTA 3MB / matching 8MB layout).
 - `ULTRA` -> `ESP32S3`, `FlashSize=8M`, `PartitionScheme=default_8MB`
 
-## 7) Libraries used by this project
+## 8) Libraries used by this project
 
 The codebase uses a mix of libraries from the ESP32 Arduino core and a small set of external libraries that must be installed separately.
 
