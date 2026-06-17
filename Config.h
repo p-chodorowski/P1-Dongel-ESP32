@@ -4,8 +4,12 @@
 #define LED_OFF             HIGH
 #define SETTINGS_FILE       "/DSMRsettings.json"
 #define HOST_DATA_FILES     "cdn.jsdelivr.net"
-// #define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@latest/data"
-#define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@" P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "/data"
+// Fork frontend CDN (public repo required for jsDelivr). Switch CDN_FORK_REF to
+// P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "." P1_STR(_VERSION_PATCH)
+// after tagging each release (git tag 5.8.4 && git push origin 5.8.4).
+#define CDN_FORK_REPO       "p-chodorowski/P1-Dongel-ESP32"
+#define CDN_FORK_REF        "solax_energy_meters"
+#define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/" CDN_FORK_REPO "@" CDN_FORK_REF "/data"
 #define URL_INDEX_FALLBACK  "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@latest/data"
 
 #ifndef ENABLE_MIMICS
