@@ -989,10 +989,17 @@ select#languageSelector {background-color: unset; color: #fff; border: none;colo
 #settings_btns { text-align: center; }
 
 /* container width */
+#Settings{
+  width: min(900px, calc(100vw - 24px));
+  margin-left: auto;
+  margin-right: auto;
+}
+
 #Settings #tabEditSettings .inner-div{
   display: block;
   max-width: 900px;
   width: min(900px, calc(100vw - 24px));
+  margin: 0 auto;
   text-align: center;
 }
 
@@ -1042,7 +1049,7 @@ select#languageSelector {background-color: unset; color: #fff; border: none;colo
   padding: 10px;
   overflow: hidden; /* vangt 1px overflow af */
   width: fit-content;
-  max-width: calc(100vw - 24px);
+  max-width: 100%;
   margin: 14px auto 0;
   text-align: left;
 }
@@ -1141,11 +1148,29 @@ select#languageSelector {background-color: unset; color: #fff; border: none;colo
   text-transform: capitalize;
 }
 
+#tap_monitor_table_wrap{
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+#tap_monitor_table{
+  table-layout: fixed;
+  width: 100%;
+}
+
 #tap_monitor_table th,
 #tap_monitor_table td{
   text-align: left;
   padding: 8px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
+
+#tap_monitor_table th:nth-child(1),
+#tap_monitor_table td:nth-child(1){ width: 140px; }
+
+#tap_monitor_table th:nth-child(3),
+#tap_monitor_table td:nth-child(3){ width: 72px; }
 
 #tap_monitor_table td:nth-child(2){
   font-family: monospace;
