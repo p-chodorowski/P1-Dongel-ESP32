@@ -780,7 +780,7 @@ ApiResponse handleDevApi(const ApiRequestContext& request)
       String jsonIn  = request.body;
       DebugT("json in :");Debugln(jsonIn);
       char field[25] = "";
-      char newValue[101]="";
+      char newValue[256]="";
 
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, jsonIn);

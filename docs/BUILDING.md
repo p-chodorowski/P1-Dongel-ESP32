@@ -122,7 +122,7 @@ The CDN ref is defined in four places that must stay in sync:
 - The hardcoded language-URL fallback in `cdn/DSMRindex.js` (used only when
   `CDN_BASE` is unset).
 
-All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.5`.
+All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.6`.
 
 ### Branching model
 
@@ -138,7 +138,7 @@ Electric fields into the wrong settings tab). Always pin to a tag.
 ### Releasing a new frontend
 
 1. Land all `cdn/` and `data/DSMRindexEDGE.html` changes on `main` and bump
-   `version.h` (e.g. `5.8.5`).
+   `version.h` (e.g. `5.8.6`).
 2. Set the new version in all four locations above (`CDN_FORK_REF`, `CDN_REF`,
    every `@<ver>` URL in `data/DSMRindexEDGE.html`, and the fallback in
    `cdn/DSMRindex.js`).
@@ -146,16 +146,16 @@ Electric fields into the wrong settings tab). Always pin to a tag.
    public repos):
 
    ```bash
-   git tag 5.8.5
-   git push origin main 5.8.5
+   git tag 5.8.6
+   git push origin main 5.8.6
    ```
 
 4. Verify jsDelivr is serving the pinned tag before flashing. Open the assets
    directly and confirm the expected content is present:
 
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.5/cdn/DSMRindex.js`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.6/cdn/DSMRindex.js`
      should contain `TAP_KEYS`.
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.5/cdn/DSMRindex_body.html`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.6/cdn/DSMRindex_body.html`
      should contain `settings_tapelectric`.
 
 5. On the device, delete the cached `/DSMRindexEDGE.html` (via the file manager
