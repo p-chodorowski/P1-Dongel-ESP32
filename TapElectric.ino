@@ -6,6 +6,12 @@
 **             POST https://api.tapelectric.app/api/v1/meters/{meterId}/data
 **             Auth via the X-Api-Key header. Both meter ID and API key are
 **             configured at runtime through the WebUI settings.
+**
+**  Tap API body contract (L1-only, single-phase production default):
+**    timestamp  UTC ISO-8601 with ms and Z suffix (system clock via NTP,
+**               not P1 meter time), e.g. 2026-07-22T09:58:17.204Z
+**    perPhase.l1  always present with voltage, current, and power
+**               (zero values are sent, not omitted). L2/L3 are not sent.
 ***************************************************************************
 */
 
@@ -16,6 +22,8 @@
 #ifndef URL_TAPELECTRIC_BASE
   #define URL_TAPELECTRIC_BASE "https://api.tapelectric.app"
 #endif
+
+#include <sys/time.h>
 
 static WiFiClientSecure tapTlsClient;
 static uint8_t  tapPostErrors = 0;
@@ -74,56 +82,40 @@ void clearTapMonitorEntries() {
 }
 
 static void tapBuildTimestamp(char* out, size_t outLen) {
-  const char* ts = (DSMRdata.timestamp_present && DSMRdata.timestamp.length() >= 12)
-                     ? DSMRdata.timestamp.c_str()
-                     : actTimestamp;
-  if (strlen(ts) < 12) {
-    strlcpy(out, ts, outLen);
+  struct timeval tv = {};
+  if (gettimeofday(&tv, nullptr) != 0) {
+    time_t now = time(nullptr);
+    struct tm* utc = gmtime(&now);
+    if (!utc) {
+      out[0] = '\0';
+      return;
+    }
+    snprintf(out, outLen, "%04d-%02d-%02dT%02d:%02d:%02d.000Z",
+             utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+             utc->tm_hour, utc->tm_min, utc->tm_sec);
     return;
   }
 
-  struct tm t = {};
-  t.tm_year = (ts[0] - '0') * 10 + (ts[1] - '0') + 100;
-  t.tm_mon = (ts[2] - '0') * 10 + (ts[3] - '0') - 1;
-  t.tm_mday = (ts[4] - '0') * 10 + (ts[5] - '0');
-  t.tm_hour = (ts[6] - '0') * 10 + (ts[7] - '0');
-  t.tm_min = (ts[8] - '0') * 10 + (ts[9] - '0');
-  t.tm_sec = (ts[10] - '0') * 10 + (ts[11] - '0');
-  t.tm_isdst = -1;
-
-  if (mktime(&t) != (time_t)-1) {
-    char buf[32];
-    if (strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S%z", &t) > 0) {
-      const size_t len = strlen(buf);
-      if (len >= 5 && (buf[len - 5] == '+' || buf[len - 5] == '-')) {
-        char formatted[32];
-        snprintf(formatted, sizeof(formatted), "%.*s:%s", (int)(len - 2), buf, buf + len - 2);
-        strlcpy(out, formatted, outLen);
-        return;
-      }
-      strlcpy(out, buf, outLen);
-      return;
-    }
+  struct tm* utc = gmtime(&tv.tv_sec);
+  if (!utc) {
+    out[0] = '\0';
+    return;
   }
 
-  const char* offset = (strlen(ts) >= 13 && (ts[12] == 'S' || ts[12] == 's')) ? "+02:00" : "+01:00";
-  snprintf(out, outLen, "20%c%c-%c%c-%c%cT%c%c:%c%c:%c%c%s",
-           ts[0], ts[1], ts[2], ts[3], ts[4], ts[5],
-           ts[6], ts[7], ts[8], ts[9], ts[10], ts[11], offset);
+  snprintf(out, outLen, "%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ",
+           utc->tm_year + 1900, utc->tm_mon + 1, utc->tm_mday,
+           utc->tm_hour, utc->tm_min, utc->tm_sec,
+           (long)(tv.tv_usec / 1000));
 }
 
 String JsonTapElectric(const WorkerTapPayload& payload) {
   JsonDocument doc;
   doc["timestamp"] = payload.timestamp;
   JsonObject perPhase = doc["perPhase"].to<JsonObject>();
-
-  static const char* keys[3] = { "l1", "l2", "l3" };
-  for (uint8_t i = 0; i < 3; i++) {
-    JsonObject phase = perPhase[keys[i]].to<JsonObject>();
-    phase["voltage"] = payload.voltage[i] / 1000.0;
-    phase["current"] = payload.current[i] / 1000.0;
-    phase["power"] = payload.power[i];
-  }
+  JsonObject l1 = perPhase["l1"].to<JsonObject>();
+  l1["voltage"] = payload.voltage / 1000.0;
+  l1["current"] = payload.current / 1000.0;
+  l1["power"] = payload.power;
 
   String output;
   serializeJson(doc, output);
@@ -147,27 +139,16 @@ void PostTapElectric() {
 
   WorkerTapPayload payload = {};
   tapBuildTimestamp(payload.timestamp, sizeof(payload.timestamp));
+  if (!payload.timestamp[0]) return;
 
-  // L1 is always sent; fall back to the aggregate power when a meter does not
-  // report per-phase power (typical for single-phase meters).
+  // L1 only. Fall back to aggregate power when the meter has no per-phase OBIS.
   if (DSMRdata.power_delivered_l1_present || DSMRdata.power_returned_l1_present) {
-    payload.power[0] = DSMRdata.power_delivered_l1.int_val() - DSMRdata.power_returned_l1.int_val();
+    payload.power = DSMRdata.power_delivered_l1.int_val() - DSMRdata.power_returned_l1.int_val();
   } else {
-    payload.power[0] = DSMRdata.power_delivered.int_val() - DSMRdata.power_returned.int_val();
+    payload.power = DSMRdata.power_delivered.int_val() - DSMRdata.power_returned.int_val();
   }
-  if (DSMRdata.voltage_l1_present) payload.voltage[0] = DSMRdata.voltage_l1.int_val();
-  if (DSMRdata.current_l1_present) payload.current[0] = DSMRdata.current_l1.int_val();
-
-  if (DSMRdata.voltage_l2_present || DSMRdata.power_delivered_l2_present) {
-    payload.power[1] = DSMRdata.power_delivered_l2.int_val() - DSMRdata.power_returned_l2.int_val();
-    if (DSMRdata.voltage_l2_present) payload.voltage[1] = DSMRdata.voltage_l2.int_val();
-    if (DSMRdata.current_l2_present) payload.current[1] = DSMRdata.current_l2.int_val();
-  }
-  if (DSMRdata.voltage_l3_present || DSMRdata.power_delivered_l3_present) {
-    payload.power[2] = DSMRdata.power_delivered_l3.int_val() - DSMRdata.power_returned_l3.int_val();
-    if (DSMRdata.voltage_l3_present) payload.voltage[2] = DSMRdata.voltage_l3.int_val();
-    if (DSMRdata.current_l3_present) payload.current[2] = DSMRdata.current_l3.int_val();
-  }
+  if (DSMRdata.voltage_l1_present) payload.voltage = DSMRdata.voltage_l1.int_val();
+  if (DSMRdata.current_l1_present) payload.current = DSMRdata.current_l1.int_val();
 
   if (!WorkerEnqueueTapPost(payload)) return;
 
