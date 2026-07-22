@@ -121,8 +121,8 @@ String JsonTapElectric(const WorkerTapPayload& payload) {
   for (uint8_t i = 0; i < 3; i++) {
     if (!(payload.phaseMask & (1 << i))) continue;
     JsonObject phase = perPhase[keys[i]].to<JsonObject>();
-    if (payload.voltage[i]) phase["voltage"] = payload.voltage[i] / 1000.0;
-    if (payload.current[i]) phase["current"] = payload.current[i] / 1000.0;
+    phase["voltage"] = payload.voltage[i] / 1000.0;
+    phase["current"] = payload.current[i] / 1000.0;
     phase["power"] = payload.power[i];
   }
 

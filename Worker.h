@@ -50,8 +50,8 @@ struct WorkerWebhookPayload {
 struct WorkerTapPayload {
   char timestamp[28];   // ISO-8601 e.g. 2026-06-17T14:30:00+02:00
   int32_t power[3];     // watt, net per phase (positive=consumption)
-  int32_t voltage[3];   // millivolt per phase (0 = not reported)
-  int32_t current[3];   // milliampere per phase (0 = not reported)
+  int32_t voltage[3];   // millivolt per phase (0 = zero or unavailable, always serialized)
+  int32_t current[3];   // milliampere per phase (0 = zero or unavailable, always serialized)
   uint8_t phaseMask;    // bit0=l1, bit1=l2, bit2=l3
 };
 
