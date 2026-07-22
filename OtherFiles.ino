@@ -110,6 +110,8 @@ void writeSettingsDirect() {
   docw["TapMeterId"] = settingTapMeterId;
   docw["TapInterval"] = settingTapInterval;
   docw["tap_monitor"] = bTapMonitor;
+  docw["time_ntp"] = bTimeFromNtp;
+  docw["TimeZone"] = settingTimezone;
   docw["Fuse"] = settingFuse;
   docw["Phases"] = settingPhases;
   // docw["SmHasFaseInfo"] = settingSmHasFaseInfo;
@@ -241,6 +243,10 @@ void readSettings(bool show)
     settingTapInterval = constrain(doc["TapInterval"].as<int>(), 1, 30);
   }
   if (doc["tap_monitor"].is<bool>()) bTapMonitor = doc["tap_monitor"];
+  if (doc["time_ntp"].is<bool>()) bTimeFromNtp = doc["time_ntp"];
+  if (doc["TimeZone"].is<const char*>()) {
+    strlcpy(settingTimezone, doc["TimeZone"].as<const char*>(), sizeof(settingTimezone));
+  }
   // settingSmHasFaseInfo = doc["SmHasFaseInfo"];
   
   if (doc["mqtt-hide"].is<bool>()) hideMQTTsettings = doc["mqtt-hide"];
@@ -339,6 +345,8 @@ void readSettings(bool show)
   if (settingMQTTbrokerPort    < 1) settingMQTTbrokerPort   = 1883;
   settingMeentInterval = constrain(settingMeentInterval, 1, 3600);
   settingTapInterval = constrain(settingTapInterval, 1, 30);
+
+  applyTimezoneSetting();
 
   if (!show) return;
 
@@ -515,7 +523,12 @@ void updateSetting(const char *field, const char *newValue)
   if (!stricmp(field, "act-json-mqtt")) bActJsonMQTT = (stricmp(newValue, "true") == 0?true:false);  
   if (!stricmp(field, "eid-enabled")) bEID_enabled = (stricmp(newValue, "true") == 0?true:false);  
   if (!stricmp(field, "tap-enabled")) bTapEnabled = (stricmp(newValue, "true") == 0?true:false);
-  if (!stricmp(field, "tap_monitor")) bTapMonitor = (stricmp(newValue, "true") == 0?true:false);  
+  if (!stricmp(field, "tap_monitor")) bTapMonitor = (stricmp(newValue, "true") == 0?true:false);
+  if (!stricmp(field, "time_ntp")) bTimeFromNtp = (stricmp(newValue, "true") == 0?true:false);
+  if (!stricmp(field, "time_zone")) {
+    strCopy(settingTimezone, sizeof(settingTimezone), newValue);
+    applyTimezoneSetting();
+  }
   
   #ifdef UDP_BCAST
   if (!stricmp(field, "udp")) bUDPenabled = (stricmp(newValue, "true") == 0?true:false);  

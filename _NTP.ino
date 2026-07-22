@@ -36,6 +36,16 @@ void setTimezone(String timezone){
   tzset();
 }
 
+void applyTimezoneSetting() {
+  if (!settingTimezone[0]) {
+    strlcpy(settingTimezone, "CET-1CEST,M3.5.0,M10.5.0/3", sizeof(settingTimezone));
+  }
+  setTimezone(settingTimezone);
+  if (!skipNetwork) {
+    configTzTime(settingTimezone, "nl.pool.ntp.org", "be.pool.ntp.org", "de.pool.ntp.org");
+  }
+}
+
 //=======================================================================
 void printLocalTime(){
   if(getLocalTime(&tm)) DebugTln(&tm, "%A, %B %d %Y %H:%M:%S zone %Z %z ");
@@ -58,7 +68,7 @@ void startNTP() {
 
   sntp_set_time_sync_notification_cb(cbSyncTime);  // set a Callback function for time synchronization notification
   sntp_set_sync_interval( NTP_SYNC_INTERVAL * 1000UL ); //sync 
-  configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "nl.pool.ntp.org", "be.pool.ntp.org", "de.pool.ntp.org");
+  applyTimezoneSetting();
   if(!getLocalTime(&tm)){
     DebugTln(F("Failed to obtain time"));
     return;

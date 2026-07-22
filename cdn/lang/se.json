@@ -325,6 +325,8 @@
   "dict_tap_api_key": "Tap Electric API-nyckel",
   "dict_tap_meter_id": "Tap Electric mätar-ID",
   "dict_tap_interval": "Skicka Tap Electric-data (sek.)",
+  "dict_time_ntp": "Använd NTP-tid (ignorera mätarklocka)",
+  "dict_time_zone": "Tidszon",
   "dict_mqttbroker_connected": "MQTT broker ansluten",
   "dict_meter_source": "Mätarkälla",
   "dict_telegramcount": "Meddelanden från smart elmätare behandlade",

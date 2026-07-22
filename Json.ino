@@ -605,6 +605,8 @@ if ( !hideMQTTsettings) {
   doc["eid-enabled"] = bEID_enabled;
   doc["eid-planner"] = StroomPlanData.size() > 0 ? true : false;
   doc["tap-enabled"] = bTapEnabled;
+  doc["time_ntp"] = bTimeFromNtp;
+  ADD_SETTING("time_zone", "s", 0, sizeof(settingTimezone) - 1, settingTimezone);
   doc["nrgm-enabled"] = bNRGMenabled;
   #ifdef NETSWITCH
   doc["netsw-enabled"] = bNETSWenabled;

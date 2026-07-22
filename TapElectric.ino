@@ -81,6 +81,31 @@ static void tapBuildTimestamp(char* out, size_t outLen) {
     strlcpy(out, ts, outLen);
     return;
   }
+
+  struct tm t = {};
+  t.tm_year = (ts[0] - '0') * 10 + (ts[1] - '0') + 100;
+  t.tm_mon = (ts[2] - '0') * 10 + (ts[3] - '0') - 1;
+  t.tm_mday = (ts[4] - '0') * 10 + (ts[5] - '0');
+  t.tm_hour = (ts[6] - '0') * 10 + (ts[7] - '0');
+  t.tm_min = (ts[8] - '0') * 10 + (ts[9] - '0');
+  t.tm_sec = (ts[10] - '0') * 10 + (ts[11] - '0');
+  t.tm_isdst = -1;
+
+  if (mktime(&t) != (time_t)-1) {
+    char buf[32];
+    if (strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S%z", &t) > 0) {
+      const size_t len = strlen(buf);
+      if (len >= 5 && (buf[len - 5] == '+' || buf[len - 5] == '-')) {
+        char formatted[32];
+        snprintf(formatted, sizeof(formatted), "%.*s:%s", (int)(len - 2), buf, buf + len - 2);
+        strlcpy(out, formatted, outLen);
+        return;
+      }
+      strlcpy(out, buf, outLen);
+      return;
+    }
+  }
+
   const char* offset = (strlen(ts) >= 13 && (ts[12] == 'S' || ts[12] == 's')) ? "+02:00" : "+01:00";
   snprintf(out, outLen, "20%c%c-%c%c-%c%cT%c%c:%c%c:%c%c%s",
            ts[0], ts[1], ts[2], ts[3], ts[4], ts[5],

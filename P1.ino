@@ -169,6 +169,20 @@ static void applyParsedSmartMeterData(MyData& DSMRdataNew, bool isHan) {
       DSMRdata.timestamp_present = true;
     }
 
+    if (bTimeFromNtp && !skipNetwork && getLocalTime(&tm)) {
+      DSTactive = tm.tm_isdst;
+      snprintf(cMsg, sizeof(cMsg), "%02u%02u%02u%02u%02u%02u%c",
+               (unsigned)((tm.tm_year - 100) % 100),
+               (unsigned)(tm.tm_mon + 1),
+               (unsigned)tm.tm_mday,
+               (unsigned)tm.tm_hour,
+               (unsigned)tm.tm_min,
+               (unsigned)tm.tm_sec,
+               DSTactive ? 'S' : 'W');
+      DSMRdata.timestamp         = cMsg;
+      DSMRdata.timestamp_present = true;
+    }
+
     if (mbusWater) {
       waterDelivered = MbusDelivered(mbusWater);
       waterDeliveredTimestamp = mbusDeliveredTimestamp;

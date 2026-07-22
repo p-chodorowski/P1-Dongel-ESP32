@@ -312,6 +312,8 @@
   "dict_tap_api_key": "Tap Electric API-sleutel",
   "dict_tap_meter_id": "Tap Electric meter-ID",
   "dict_tap_interval": "Verzend Tap Electric data (sec.)",
+  "dict_time_ntp": "Gebruik NTP-tijd (negeer meterklok)",
+  "dict_time_zone": "Tijdzone",
   "dict_mqttbroker_connected": "MQTT broker verbonden",
   "dict_meter_source": "Meterbron",
   "dict_telegramcount": "Slimme meter berichten verwerkt",

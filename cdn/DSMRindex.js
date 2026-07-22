@@ -3685,6 +3685,43 @@ function initTapMonitorControls() {
 
 			  sInput = sel;
 			}
+			else if (i === "time_zone") {
+			  const TIMEZONES = [
+				{ v: "CET-1CEST,M3.5.0,M10.5.0/3", t: "Europe/Amsterdam (CET/CEST)" },
+				{ v: "GMT0BST,M3.5.0/1,M10.5.0", t: "Europe/London (GMT/BST)" },
+				{ v: "CET-1CEST,M3.5.0,M10.5.0/3", t: "Europe/Berlin" },
+				{ v: "CET-1CEST,M3.5.0,M10.5.0/3", t: "Europe/Warsaw" },
+				{ v: "CET-1CEST,M3.5.0,M10.5.0/3", t: "Europe/Stockholm" },
+				{ v: "UTC0", t: "UTC" }
+			  ];
+
+			  const sel = document.createElement("select");
+			  sel.setAttribute("id", fldId);
+
+			  const cur = data[i].value ?? "CET-1CEST,M3.5.0,M10.5.0/3";
+			  let matched = false;
+
+			  TIMEZONES.forEach(o => {
+				const opt = document.createElement("option");
+				opt.value = o.v;
+				opt.textContent = o.t;
+				if (o.v === cur) {
+				  opt.selected = true;
+				  matched = true;
+				}
+				sel.appendChild(opt);
+			  });
+
+			  if (!matched && cur) {
+				const opt = document.createElement("option");
+				opt.value = cur;
+				opt.textContent = cur + " (custom)";
+				opt.selected = true;
+				sel.appendChild(opt);
+			  }
+
+			  sInput = sel;
+			}
 			else if (i === "phases") {
 			  const PHASES = [
 				{ v: 0, t: "Auto" },
@@ -4607,7 +4644,7 @@ const FALLBACK_TRANSLATIONS = {
 const URL_I18N = typeof DEBUG !== 'undefined' && DEBUG
   ? "http://localhost/~martijn/dsmr-api/v5/lang"
   : (typeof CDN_BASE !== 'undefined' ? CDN_BASE
-       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.6/cdn") + "/lang";
+       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.7/cdn") + "/lang";
 
 function t(key) {
   return translations[key] || FALLBACK_TRANSLATIONS[locale]?.[key] || FALLBACK_TRANSLATIONS.en[key] || key;
