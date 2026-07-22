@@ -119,7 +119,6 @@ String JsonTapElectric(const WorkerTapPayload& payload) {
 
   static const char* keys[3] = { "l1", "l2", "l3" };
   for (uint8_t i = 0; i < 3; i++) {
-    if (!(payload.phaseMask & (1 << i))) continue;
     JsonObject phase = perPhase[keys[i]].to<JsonObject>();
     phase["voltage"] = payload.voltage[i] / 1000.0;
     phase["current"] = payload.current[i] / 1000.0;
@@ -158,19 +157,16 @@ void PostTapElectric() {
   }
   if (DSMRdata.voltage_l1_present) payload.voltage[0] = DSMRdata.voltage_l1.int_val();
   if (DSMRdata.current_l1_present) payload.current[0] = DSMRdata.current_l1.int_val();
-  payload.phaseMask = 0x01;
 
   if (DSMRdata.voltage_l2_present || DSMRdata.power_delivered_l2_present) {
     payload.power[1] = DSMRdata.power_delivered_l2.int_val() - DSMRdata.power_returned_l2.int_val();
     if (DSMRdata.voltage_l2_present) payload.voltage[1] = DSMRdata.voltage_l2.int_val();
     if (DSMRdata.current_l2_present) payload.current[1] = DSMRdata.current_l2.int_val();
-    payload.phaseMask |= 0x02;
   }
   if (DSMRdata.voltage_l3_present || DSMRdata.power_delivered_l3_present) {
     payload.power[2] = DSMRdata.power_delivered_l3.int_val() - DSMRdata.power_returned_l3.int_val();
     if (DSMRdata.voltage_l3_present) payload.voltage[2] = DSMRdata.voltage_l3.int_val();
     if (DSMRdata.current_l3_present) payload.current[2] = DSMRdata.current_l3.int_val();
-    payload.phaseMask |= 0x04;
   }
 
   if (!WorkerEnqueueTapPost(payload)) return;
