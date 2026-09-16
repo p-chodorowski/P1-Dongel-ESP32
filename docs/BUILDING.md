@@ -112,7 +112,9 @@ After compiling an Ultra `.bin`, stage the files the dongle expects (no upload):
 python3 tools/publish_ota.py --firmware path/to/compiled.bin --out dist/ultra
 ```
 
-That writes `dist/ultra/version-manifest.json` and `dist/ultra/DSMR-API-V{version}_8Mb.bin`. Copy those files to the HTTP directory above.
+That writes `dist/ultra/version-manifest.json` and `dist/ultra/DSMR-API-V{version}_8Mb.bin` (four-part `5.8.4.N` from `_VERSION_FORK`). Copy those files to the HTTP directory above.
+
+Keep vendor `5.8.4` and bump only `_VERSION_FORK` in `version.h` for each of our Ultra releases.
 
 `BaseOTAurl` is 96 bytes (`BASE_OTA_URL_SIZE` in `profile.h`).
 

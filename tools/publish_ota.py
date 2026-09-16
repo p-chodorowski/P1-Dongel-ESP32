@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION_RE = re.compile(r"#define\s+_VERSION_(MAJOR|MINOR|PATCH)\s+(\d+)")
+VERSION_RE = re.compile(r"#define\s+_VERSION_(MAJOR|MINOR|PATCH|FORK)\s+(\d+)")
 
 
 @dataclass(frozen=True)
@@ -23,22 +23,23 @@ class PublishResult:
     firmware_path: Path | None
 
 
-def parse_version(version_h_text: str) -> tuple[int, int, int]:
+def parse_version(version_h_text: str) -> tuple[int, int, int, int]:
     found: dict[str, int] = {}
     for match in VERSION_RE.finditer(version_h_text):
         found[match.group(1).lower()] = int(match.group(2))
     try:
-        return found["major"], found["minor"], found["patch"]
+        return found["major"], found["minor"], found["patch"], found.get("fork", 0)
     except KeyError as exc:
         raise ValueError("version.h is missing _VERSION_MAJOR/MINOR/PATCH") from exc
 
 
-def version_manifest(major: int, minor: int, fix: int) -> dict[str, int | str]:
+def version_manifest(major: int, minor: int, fix: int, fork: int) -> dict[str, int | str]:
     return {
-        "version": f"{major}.{minor}.{fix}",
+        "version": f"{major}.{minor}.{fix}.{fork}",
         "major": major,
         "minor": minor,
         "fix": fix,
+        "fork": fork,
     }
 
 
@@ -51,8 +52,8 @@ def publish(
     firmware: Path | None,
     out_dir: Path,
 ) -> PublishResult:
-    major, minor, fix = parse_version(version_h.read_text(encoding="utf-8"))
-    manifest = version_manifest(major, minor, fix)
+    major, minor, fix, fork = parse_version(version_h.read_text(encoding="utf-8"))
+    manifest = version_manifest(major, minor, fix, fork)
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = out_dir / "version-manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")

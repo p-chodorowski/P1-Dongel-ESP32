@@ -10,6 +10,30 @@ const SQUARE_M_CUBED 	   = "\u33A5";
 
 "use strict";
 
+// OTA_VERSION_BEGIN
+function parseOtaVersionParts(versionStr, forkOverride) {
+  const raw = String(versionStr || "").replace(/^[vV]/, "").replace(/\+/g, " ").trim();
+  const token = raw.split(/\s/)[0] || "";
+  const nums = token.split(".").map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n));
+  const forkFromField = (forkOverride !== undefined && forkOverride !== null && forkOverride !== "")
+    ? parseInt(forkOverride, 10)
+    : NaN;
+  return {
+    major: nums[0] || 0,
+    minor: nums[1] || 0,
+    fix: nums[2] || 0,
+    fork: Number.isNaN(forkFromField) ? (nums[3] || 0) : forkFromField
+  };
+}
+
+function otaVersionIsNewer(remote, local) {
+  if (remote.major !== local.major) return remote.major > local.major;
+  if (remote.minor !== local.minor) return remote.minor > local.minor;
+  if (remote.fix !== local.fix) return remote.fix > local.fix;
+  return remote.fork > local.fork;
+}
+// OTA_VERSION_END
+
 //   let ota_url 				= "";
   let activeTab             = "bDashTab";
   let PauseAPI				= false; //pause api call when browser is inactive
@@ -1069,9 +1093,10 @@ function getclaim(){
 
 function parseVersionManifest(json)
 {	
-	console.log("json.version:" + json.version + " firmwareVersion: "+ firmwareVersion);
-	if ( json.version != "" && firmwareVersion != "") {
-	  if ( firmwareVersion < (json.major*10000 + 100 * json.minor + json.fix) ) 
+	console.log("json.version:" + json.version + " firmwareVersion: "+ JSON.stringify(firmwareVersion));
+	if ( json.version != "" && firmwareVersion ) {
+	  const remote = parseOtaVersionParts(json.version, json.fork);
+	  if ( otaVersionIsNewer(remote, firmwareVersion) )
 		document.getElementById('message').innerHTML = "Software versie " + json.version + " beschikbaar";
 	  else document.getElementById('message').innerHTML = "";
 	}
@@ -1832,7 +1857,7 @@ function parseDeviceInfo(obj) {
     row.insertCell(0).innerHTML = t("lbl-latest-fwversion");
     row.insertCell(1).innerHTML = manifest.version;
     row.insertCell(2).innerHTML = `<a style='color:red' onclick='startUpdateFlow("stable")' href='#'>${t('lbl-install')}</a>`;
-    console.log("last version:", manifest.major * 10000 + manifest.minor * 100);
+    console.log("last version:", manifest.version);
   }
   
     if (manifest.beta) {
@@ -1867,16 +1892,8 @@ function parseDeviceInfo(obj) {
   // firmware parsing
   document.getElementById('devVersion').innerHTML = devVersion;
   firmwareVersion_dspl = devVersion;
-  let tmpFW = devVersion.replace("+", " ").replace("v", "");
-  const tmpX = tmpFW.split(" ")[0];
-  const [maj, min, fix] = tmpX.split(".").map(Number);
-  const firmwareVersion = maj * 10000 + min * 100 + fix;
-  console.log("tmpFW:", tmpFW);
-
-  // check for update
-  if (manifest.version) {
-    const latest = manifest.major * 10000 + manifest.minor * 100 + manifest.fix;
-  }
+  firmwareVersion = parseOtaVersionParts(devVersion);
+  console.log("firmwareVersion:", firmwareVersion);
 
   if (!esphomeManifestRequested || !Object.keys(objDAL?.getESPHomeManifest?.()?.targets || {}).length) {
     esphomeManifestRequested = true;

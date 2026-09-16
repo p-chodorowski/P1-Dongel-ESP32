@@ -19,21 +19,22 @@ VERSION_H = """#pragma once
 #define _VERSION_MAJOR 5
 #define _VERSION_MINOR 8
 #define _VERSION_PATCH 4
+#define _VERSION_FORK 1
 """
 
 
 class PublishOtaTests(unittest.TestCase):
     def test_parse_version_from_version_h(self) -> None:
-        self.assertEqual(parse_version(VERSION_H), (5, 8, 4))
+        self.assertEqual(parse_version(VERSION_H), (5, 8, 4, 1))
 
     def test_manifest_fields(self) -> None:
         self.assertEqual(
-            version_manifest(5, 8, 4),
-            {"version": "5.8.4", "major": 5, "minor": 8, "fix": 4},
+            version_manifest(5, 8, 4, 1),
+            {"version": "5.8.4.1", "major": 5, "minor": 8, "fix": 4, "fork": 1},
         )
 
     def test_ultra_bin_name_is_8mb(self) -> None:
-        self.assertEqual(dest_bin_name("5.8.4"), "DSMR-API-V5.8.4_8Mb.bin")
+        self.assertEqual(dest_bin_name("5.8.4.1"), "DSMR-API-V5.8.4.1_8Mb.bin")
 
     def test_publish_writes_manifest_and_copies_8mb_bin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -47,14 +48,15 @@ class PublishOtaTests(unittest.TestCase):
             result = publish(version_h=version_h, firmware=firmware, out_dir=out)
 
             manifest_path = out / "version-manifest.json"
-            bin_path = out / "DSMR-API-V5.8.4_8Mb.bin"
+            bin_path = out / "DSMR-API-V5.8.4.1_8Mb.bin"
             self.assertEqual(result.manifest_path, manifest_path)
             self.assertEqual(result.firmware_path, bin_path)
             self.assertEqual(json.loads(manifest_path.read_text(encoding="utf-8")), {
-                "version": "5.8.4",
+                "version": "5.8.4.1",
                 "major": 5,
                 "minor": 8,
                 "fix": 4,
+                "fork": 1,
             })
             self.assertEqual(bin_path.read_bytes(), b"ultra-firmware")
 
