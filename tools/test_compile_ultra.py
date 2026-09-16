@@ -33,6 +33,9 @@ class CompileUltraConfigTests(unittest.TestCase):
         self.assertNotIn("ESPTelnet", compile_ultra.REGISTRY_LIBS)
         self.assertIn("TelnetStream", compile_ultra.REGISTRY_LIBS)
 
+    def test_git_libs_include_asynctcp_for_emodbus(self) -> None:
+        self.assertTrue(any("AsyncTCP" in url for url in compile_ultra.GIT_LIBS))
+
 
 if __name__ == "__main__":
     unittest.main()

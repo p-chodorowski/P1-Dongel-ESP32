@@ -37,6 +37,7 @@ GIT_LIBS = (
     "https://github.com/mhendriks/dsmr2Lib.git",
     "https://github.com/eModbus/eModbus.git",
     "https://github.com/kmackay/micro-ecc.git",
+    "https://github.com/ESP32Async/AsyncTCP.git",
 )
 
 
