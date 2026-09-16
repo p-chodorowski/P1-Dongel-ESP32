@@ -31,7 +31,6 @@ REGISTRY_LIBS = (
     "CRC32",
     "PubSubClient",
     "WebSockets",
-    "ESPTelnet",
 )
 
 GIT_LIBS = (

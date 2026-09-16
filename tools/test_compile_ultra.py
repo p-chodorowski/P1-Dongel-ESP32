@@ -29,6 +29,10 @@ class CompileUltraConfigTests(unittest.TestCase):
     def test_staged_name_is_8mb(self) -> None:
         self.assertEqual(dest_bin_name("5.8.4.1"), "DSMR-API-V5.8.4.1_8Mb.bin")
 
+    def test_registry_libs_do_not_include_esptelnet(self) -> None:
+        self.assertNotIn("ESPTelnet", compile_ultra.REGISTRY_LIBS)
+        self.assertIn("TelnetStream", compile_ultra.REGISTRY_LIBS)
+
 
 if __name__ == "__main__":
     unittest.main()
