@@ -581,7 +581,10 @@ inline bool isShellyPro3EmMimicSelected() {
 #ifndef OTAURL_PREFIX
   #define OTAURL_PREFIX ""
 #endif
-char      BaseOTAurl[45] = OTAURL OTAURL_PREFIX;
+#ifndef BASE_OTA_URL_SIZE
+  #define BASE_OTA_URL_SIZE 96
+#endif
+char      BaseOTAurl[BASE_OTA_URL_SIZE] = OTAURL OTAURL_PREFIX;
 char      UpdateVersion[25] = "";
 bool      bUpdateSketch = true;
 bool      bAutoUpdate = false;

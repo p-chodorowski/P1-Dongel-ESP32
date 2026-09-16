@@ -90,7 +90,33 @@ Use `build.sh` to compile all profiles. It injects profile-specific defines and 
 - ESP32-S3 builds must always use the 8MB partition scheme (`FlashSize=8M`, `PartitionScheme=default_8MB`, OTA 3MB / matching 8MB layout).
 - `ULTRA` -> `ESP32S3`, `FlashSize=8M`, `PartitionScheme=default_8MB`
 
-## 6) Libraries used by this project
+## 6) Custom Ultra OTA URL
+
+Ultra builds default `BaseOTAurl` to:
+
+```
+http://209.38.55.197/p1dongle/ultra/
+```
+
+End-user **Update url** (settings field, without `http://`):
+
+```
+209.38.55.197/p1dongle/ultra/
+```
+
+Do not append `p1u/` or `v5/`. Override the compiled default with `-DOTA_BASE_URL="http://host/path/"` if needed (keep the trailing slash). `OTA_BASE_URL` is the full directory on Ultra.
+
+After compiling an Ultra `.bin`, stage the files the dongle expects (no upload):
+
+```
+python3 tools/publish_ota.py --firmware path/to/compiled.bin --out dist/ultra
+```
+
+That writes `dist/ultra/version-manifest.json` and `dist/ultra/DSMR-API-V{version}_8Mb.bin`. Copy those files to the HTTP directory above.
+
+`BaseOTAurl` is 96 bytes (`BASE_OTA_URL_SIZE` in `profile.h`).
+
+## 7) Libraries used by this project
 
 The codebase uses a mix of libraries from the ESP32 Arduino core and a small set of external libraries that must be installed separately.
 

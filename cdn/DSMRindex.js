@@ -3079,7 +3079,7 @@ function formatValue(value)
         "eid-enabled" in json ? eid_enabled = json["eid-enabled"]: eid_enabled = false;
         "dev-pairing" in json ? pairing_enabled = json["dev-pairing"]: pairing_enabled = false;
         "eid-planner" in json ? eid_planner_enabled = json["eid-planner"]: eid_planner_enabled = false;
-        "ota_url" in json ? ota_url = json.ota_url.value: ota_url = "ota.smart-stuff.nl/v5/";
+        ota_url = ("ota_url" in json && json.ota_url.value) ? json.ota_url.value : "";
         HeeftWater = settingsWaterEnabled(json);
         AMPS = asNumber(json.fuse?.value);
         if (Number.isNaN(AMPS)) AMPS = 25;

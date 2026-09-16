@@ -81,15 +81,33 @@
   #endif
 #endif
 
-#define OTA_BASE_URL          "http://ota.smart-stuff.nl/"
-#if _VERSION_MAJOR == 5
-  #define OTA_VERSION         "v5/"
-#elif defined(ULTRA)
-  #define OTA_VERSION         "v4/"
-#else
-  #define OTA_VERSION         ""
+#ifndef OTA_BASE_URL
+  #ifdef ULTRA
+    #define OTA_BASE_URL      "http://209.38.55.197/p1dongle/ultra/"
+  #else
+    #define OTA_BASE_URL      "http://ota.smart-stuff.nl/"
+  #endif
 #endif
-#define OTAURL                OTA_BASE_URL OTA_HW_ID OTA_VERSION
+
+#ifndef OTA_VERSION
+  #ifdef ULTRA
+    #define OTA_VERSION       ""
+  #elif _VERSION_MAJOR == 5
+    #define OTA_VERSION       "v5/"
+  #else
+    #define OTA_VERSION       ""
+  #endif
+#endif
+
+#ifdef ULTRA
+  #define OTAURL              OTA_BASE_URL
+#else
+  #define OTAURL              OTA_BASE_URL OTA_HW_ID OTA_VERSION
+#endif
+
+#ifndef BASE_OTA_URL_SIZE
+  #define BASE_OTA_URL_SIZE   96
+#endif
 
 #ifndef IO_BUTTON
   #define IO_BUTTON           -1
