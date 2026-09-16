@@ -1,0 +1,62 @@
+name: Compile Ultra
+
+on:
+  workflow_dispatch:
+    inputs:
+      ota_channel:
+        description: OTA directory baked into this Ultra build
+        type: choice
+        options:
+          - production
+          - test
+        default: production
+  pull_request:
+  push:
+    paths-ignore:
+      - "cdn/**"
+      - "docs/**"
+      - "modbus_mappings/**"
+      - "*.md"
+
+jobs:
+  compile-ultra:
+    name: Ultra 8MB firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Compile Ultra and stage OTA files
+        env:
+          OTA_CHANNEL: ${{ github.event.inputs.ota_channel || 'production' }}
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ "$OTA_CHANNEL" = "test" ]; then
+            extra+=(--test-channel)
+          fi
+          python3 tools/compile_ultra.py --out dist/ultra "${extra[@]}"
+
+      - name: Upload Ultra OTA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultra-ota-${{ github.event.inputs.ota_channel || 'production' }}
+          path: dist/ultra/*
+          if-no-files-found: error
+
+      - name: Show staged files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in sorted(Path("dist/ultra").iterdir()):
+              print(f"{p.name}\t{p.stat().st_size}")
+          PY
