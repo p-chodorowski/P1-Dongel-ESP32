@@ -104,17 +104,41 @@ End-user **Update url** (settings field, without `http://`):
 209.38.55.197/p1dongle/ultra/
 ```
 
-Do not append `p1u/` or `v5/`. Override the compiled default with `-DOTA_BASE_URL="http://host/path/"` if needed (keep the trailing slash). `OTA_BASE_URL` is the full directory on Ultra.
+Do not append `p1u/` or `v5/`. A **test** directory lives at:
 
-After compiling an Ultra `.bin`, stage the files the dongle expects (no upload):
+```
+http://209.38.55.197/p1dongle/ultra/test/
+```
+
+Production firmware keeps the production URL. Point a dev Ultra at the test directory with Settings → Update url `209.38.55.197/p1dongle/ultra/test/`, or compile with `-DOTA_TEST_CHANNEL` / `python3 tools/compile_ultra.py --test-channel`. Override any URL with `-DOTA_BASE_URL="http://host/path/"` (keep the trailing slash).
+
+### Cloud compile (GitHub Actions)
+
+The **Compile Ultra** workflow (`.github/workflows/compile-ultra.yml`) builds the Ultra sketch (ESP32-S3, 8MB, `default_8MB`) and artifacts `version-manifest.json` plus `DSMR-API-V{version}_8Mb.bin`. It does **not** FTP or USB-flash.
+
+1. GitHub → Actions → **Compile Ultra** → Run workflow.
+2. Leave **ota_channel** = `production` (default URL) or choose `test` to bake `.../ultra/test/`.
+3. Download the `ultra-ota-production` or `ultra-ota-test` artifact.
+4. FTP the two files by hand into `http://209.38.55.197/p1dongle/ultra/` or `.../ultra/test/`.
+
+Pushes and pull requests also run a production compile.
+
+Local equivalent (needs `arduino-cli`):
+
+```
+python3 tools/compile_ultra.py --out dist/ultra
+python3 tools/compile_ultra.py --out dist/ultra-test --test-channel
+```
+
+Or stage an already-compiled `.bin`:
 
 ```
 python3 tools/publish_ota.py --firmware path/to/compiled.bin --out dist/ultra
 ```
 
-That writes `dist/ultra/version-manifest.json` and `dist/ultra/DSMR-API-V{version}_8Mb.bin` (four-part `5.8.4.N` from `_VERSION_FORK`). Copy those files to the HTTP directory above.
-
 Keep vendor `5.8.4` and bump only `_VERSION_FORK` in `version.h` for each of our Ultra releases.
+
+Cloud agents and GitHub Actions **cannot USB-flash** a dongle. Flash the downloaded `.bin` locally (Arduino IDE / `esptool` / web installer) if you need a first image on hardware.
 
 `BaseOTAurl` is 96 bytes (`BASE_OTA_URL_SIZE` in `profile.h`).
 

@@ -81,9 +81,22 @@
   #endif
 #endif
 
+#ifdef ULTRA
+  #ifndef OTA_PROD_BASE_URL
+    #define OTA_PROD_BASE_URL "http://209.38.55.197/p1dongle/ultra/"
+  #endif
+  #ifndef OTA_TEST_BASE_URL
+    #define OTA_TEST_BASE_URL "http://209.38.55.197/p1dongle/ultra/test/"
+  #endif
+#endif
+
 #ifndef OTA_BASE_URL
   #ifdef ULTRA
-    #define OTA_BASE_URL      "http://209.38.55.197/p1dongle/ultra/"
+    #ifdef OTA_TEST_CHANNEL
+      #define OTA_BASE_URL    OTA_TEST_BASE_URL
+    #else
+      #define OTA_BASE_URL    OTA_PROD_BASE_URL
+    #endif
   #else
     #define OTA_BASE_URL      "http://ota.smart-stuff.nl/"
   #endif

@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CHECK = Path(__file__).resolve().parent / "ota_url_check.c"
 ULTRA_URL = "http://209.38.55.197/p1dongle/ultra/"
+ULTRA_TEST_URL = "http://209.38.55.197/p1dongle/ultra/test/"
 P1P_URL = "http://ota.smart-stuff.nl/p1p/v5/"
 OVERRIDE_URL = "http://example.test/custom-ota/"
 
@@ -49,6 +50,13 @@ def main() -> int:
             "-DULTRA",
             f'-DOTA_BASE_URL="{OVERRIDE_URL}"',
             f'-DEXPECTED_OTAURL="{OVERRIDE_URL}"',
+        ]
+    )
+    compile_and_run(
+        [
+            "-DULTRA",
+            "-DOTA_TEST_CHANNEL",
+            f'-DEXPECTED_OTAURL="{ULTRA_TEST_URL}"',
         ]
     )
     return 0
