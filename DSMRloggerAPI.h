@@ -50,8 +50,7 @@ struct {
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include <Preferences.h>
-#include <dsmr2.h>               // https://github.com/mhendriks/dsmr2Lib
-#include "P1FixedReaderCompat.h" // drop when dsmr2Lib defines P1FixedReader
+#include <dsmr2.h>               // https://github.com/mhendriks/dsmr2Lib (ships P1FixedReader)
 #include "esp_chip_info.h"
 #include <esp_now.h>             //https://randomnerdtutorials.com/esp-now-auto-pairing-esp32-esp8266/
 #include <esp_task_wdt.h>
@@ -590,7 +589,10 @@ inline bool isShellyPro3EmMimicSelected() {
 #ifndef OTAURL_PREFIX
   #define OTAURL_PREFIX ""
 #endif
-char      BaseOTAurl[45] = OTAURL OTAURL_PREFIX;
+#ifndef BASE_OTA_URL_SIZE
+  #define BASE_OTA_URL_SIZE 96
+#endif
+char      BaseOTAurl[BASE_OTA_URL_SIZE] = OTAURL OTAURL_PREFIX;
 char      UpdateVersion[25] = "";
 bool      bUpdateSketch = true;
 bool      bAutoUpdate = false;

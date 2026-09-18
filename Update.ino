@@ -239,7 +239,6 @@ void ReadManifest() {
 
 bool CheckNewVersion() {
   bool bNewVersionAvailable = false;
-  char manifestVersion[15] = "";
 
   JsonDocument manifest;
   if (!ReadManifest(manifest, nullptr)) return false;
@@ -249,16 +248,24 @@ bool CheckNewVersion() {
   int fix = manifest["fix"] | -1;
   if (maj < 0 || min < 0 || fix < 0) return false;
 
-  snprintf(manifestVersion, sizeof(manifestVersion), "%d.%d.%d", maj, min, fix);
-  Debugf("Manifest version : %s\n\r", manifestVersion);
-  Debugf("Current version: %d.%d.%d\n\r", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH);
+  const char* manifestVersion = manifest["version"] | "";
+  int fork = manifest["fork"] | -1;
+  if (fork < 0) fork = ota_fork_from_version_string(manifestVersion);
 
-  if (maj > _VERSION_MAJOR) bNewVersionAvailable = true;
-  else if ((maj == _VERSION_MAJOR) && (min > _VERSION_MINOR)) bNewVersionAvailable = true;
-  else if ((maj == _VERSION_MAJOR) && (min == _VERSION_MINOR) && (fix > _VERSION_PATCH)) bNewVersionAvailable = true;
+  Debugf("Manifest version : %s\n\r", manifestVersion[0] ? manifestVersion : "(parts only)");
+  Debugf("Current version: %d.%d.%d.%d\n\r", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH, _VERSION_FORK);
+
+  bNewVersionAvailable = ota_version_is_newer(
+    maj, min, fix, fork,
+    _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH, _VERSION_FORK
+  );
 
   if (bNewVersionAvailable) {
-    strlcpy(UpdateVersion, manifestVersion, sizeof(UpdateVersion));
+    if (manifestVersion[0]) {
+      strlcpy(UpdateVersion, manifestVersion, sizeof(UpdateVersion));
+    } else {
+      snprintf(UpdateVersion, sizeof(UpdateVersion), "%d.%d.%d.%d", maj, min, fix, fork);
+    }
     LogFile("AutoUpdate: NEW stable version available", true);
   } else {
     LogFile("AutoUpdate: NO new stable version available", true);
