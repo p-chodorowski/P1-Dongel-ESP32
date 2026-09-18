@@ -243,7 +243,7 @@ When compiling this sketch from Arduino IDE 2 (with `#define ULTRA` enabled), se
 
 ## 8) Custom Ultra OTA URL
 
-Ultra builds default `BaseOTAurl` to:
+Ultra builds default `BaseOTAurl` to our directory even when `POST_MEENT` is enabled (vendor `…/p1u/v5/me/` is not used on Ultra):
 
 ```
 http://209.38.55.197/p1dongle/ultra/

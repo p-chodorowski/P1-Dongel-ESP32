@@ -749,9 +749,10 @@ inline bool isShellyPro3EmMimicSelected() {
 #ifndef BASE_OTA_URL_SIZE
   #define BASE_OTA_URL_SIZE 96
 #endif
-#ifdef POST_MEENT
+#if defined(POST_MEENT) && !defined(ULTRA)
 char      BaseOTAurl[BASE_OTA_URL_SIZE] = "http://ota.smart-stuff.nl/p1u/v5/me/";
 #else
+// Ultra (including POST_MEENT on this fork) uses profile.h OTAURL.
 char      BaseOTAurl[BASE_OTA_URL_SIZE] = OTAURL OTAURL_PREFIX;
 #endif
 char      UpdateVersion[25] = "";
