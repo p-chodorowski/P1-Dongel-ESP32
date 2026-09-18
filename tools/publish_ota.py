@@ -33,14 +33,29 @@ def parse_version(version_h_text: str) -> tuple[int, int, int, int]:
         raise ValueError("version.h is missing _VERSION_MAJOR/MINOR/PATCH") from exc
 
 
-def version_manifest(major: int, minor: int, fix: int, fork: int) -> dict[str, int | str]:
-    return {
-        "version": f"{major}.{minor}.{fix}.{fork}",
+def version_manifest(
+    major: int,
+    minor: int,
+    fix: int,
+    fork: int,
+    beta: str | None = None,
+) -> dict[str, int | str]:
+    # Hendriks official UI/firmware only compare major.minor.fix. A fork-only
+    # bump (5.9.5.2 vs 5.9.5) is invisible to those clients. Keep the same
+    # 3-part fields they already understand, plus optional beta like
+    # ota.smart-stuff.nl (stable + beta in one folder).
+    version = f"{major}.{minor}.{fix}.{fork}" if fork else f"{major}.{minor}.{fix}"
+    manifest: dict[str, int | str] = {
+        "version": version,
         "major": major,
         "minor": minor,
         "fix": fix,
-        "fork": fork,
     }
+    if fork:
+        manifest["fork"] = fork
+    if beta:
+        manifest["beta"] = beta
+    return manifest
 
 
 def dest_bin_name(version: str) -> str:
@@ -51,9 +66,10 @@ def publish(
     version_h: Path,
     firmware: Path | None,
     out_dir: Path,
+    beta: str | None = None,
 ) -> PublishResult:
     major, minor, fix, fork = parse_version(version_h.read_text(encoding="utf-8"))
-    manifest = version_manifest(major, minor, fix, fork)
+    manifest = version_manifest(major, minor, fix, fork, beta=beta)
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = out_dir / "version-manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
@@ -87,8 +103,17 @@ def main() -> int:
         required=True,
         help="Output directory for version-manifest.json and the renamed bin",
     )
+    parser.add_argument(
+        "--beta",
+        help="Optional second version shown as Beta Firmware (same folder, Hendriks-style)",
+    )
     args = parser.parse_args()
-    result = publish(version_h=args.version_h, firmware=args.firmware, out_dir=args.out)
+    result = publish(
+        version_h=args.version_h,
+        firmware=args.firmware,
+        out_dir=args.out,
+        beta=args.beta,
+    )
     print(result.manifest_path)
     if result.firmware_path is not None:
         print(result.firmware_path)

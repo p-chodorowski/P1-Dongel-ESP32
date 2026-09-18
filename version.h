@@ -7,7 +7,7 @@
 
 #define _VERSION_MAJOR 5
 #define _VERSION_MINOR 9
-#define _VERSION_PATCH 5
+#define _VERSION_PATCH 6
 #ifndef _VERSION_FORK
 #define _VERSION_FORK 1
 #endif

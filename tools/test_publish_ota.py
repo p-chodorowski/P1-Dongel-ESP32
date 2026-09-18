@@ -33,6 +33,19 @@ class PublishOtaTests(unittest.TestCase):
             {"version": "5.8.4.1", "major": 5, "minor": 8, "fix": 4, "fork": 1},
         )
 
+    def test_manifest_includes_hendriks_beta(self) -> None:
+        self.assertEqual(
+            version_manifest(5, 9, 6, 1, beta="5.9.7.1"),
+            {
+                "version": "5.9.6.1",
+                "major": 5,
+                "minor": 9,
+                "fix": 6,
+                "fork": 1,
+                "beta": "5.9.7.1",
+            },
+        )
+
     def test_ultra_bin_name_is_8mb(self) -> None:
         self.assertEqual(dest_bin_name("5.8.4.1"), "DSMR-API-V5.8.4.1_8Mb.bin")
 

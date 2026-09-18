@@ -2074,11 +2074,12 @@ function renderDeviceInformation(obj, manifest) {
     ? `${p1ProtocolLabel(obj)} · ${deviceInfoNumber(telegramCount)} ${t("sysinfo-read")}`
     : p1ProtocolLabel(obj);
   const networkMeta = [obj.ssid, obj.ipaddress].filter(Boolean).join(" · ");
-  const installedVersion = deviceVersionNumber(obj.fwversion);
-  const latestVersion = deviceVersionNumber(manifest.version);
+  const installedVersion = parseOtaVersionParts(obj.fwversion);
+  const latestVersion = manifest.version ? parseOtaVersionParts(manifest.version, manifest.fork) : null;
+  const hasFirmwareUpdate = !!(latestVersion && otaVersionIsNewer(latestVersion, installedVersion));
   const firmwareStatus = !latestVersion
     ? t("sysinfo-checking-update")
-    : latestVersion > installedVersion ? t("sysinfo-update-available") : t("sysinfo-current");
+    : hasFirmwareUpdate ? t("sysinfo-update-available") : t("sysinfo-current");
   addDeviceInfoSummary(containers.overview, t("setting-smart-meter"), meterStatus, meterMeta);
   addDeviceInfoSummary(containers.overview, t("sysinfo-network"), obj.network, networkMeta);
   addDeviceInfoSummary(containers.overview, t("sysinfo-firmware"), shortFirmware, firmwareStatus);
@@ -2095,8 +2096,8 @@ function renderDeviceInformation(obj, manifest) {
     addFirmwareUpdateAction(betaValue, "beta");
   }
   const updateCard = document.getElementById("sysinfo_update");
-  updateCard?.classList.toggle("has-update", latestVersion > installedVersion);
-  updateCard?.classList.toggle("is-current", latestVersion > 0 && latestVersion <= installedVersion);
+  updateCard?.classList.toggle("has-update", hasFirmwareUpdate);
+  updateCard?.classList.toggle("is-current", !!(latestVersion && !hasFirmwareUpdate));
 
   ["meter_source", "p1_communication_mode"].forEach(key =>
     addDeviceInfoRow(containers.smartMeter, td(key), obj[key]));
