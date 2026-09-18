@@ -265,7 +265,7 @@ Production firmware keeps the production URL. Point a dev Ultra at the test dire
 
 ### Cloud compile (GitHub Actions)
 
-The **Compile Ultra** workflow (`.github/workflows/compile-ultra.yml`) builds the Ultra sketch (ESP32-S3, 8MB, `default_8MB`) and artifacts `version-manifest.json` plus `DSMR-API-V{version}_8Mb.bin`. It does **not** FTP or USB-flash.
+The **Compile Ultra** workflow (`.github/workflows/compile-ultra.yml`) builds the Ultra sketch using `sketch.yaml` `default_fqbn` (ESP32-S3, `FlashSize=8M`, `PartitionScheme=default_8MB`, `FlashMode=qio`, `CPUFreq=240`, `CDCOnBoot=default`, `PSRAM=disabled`) and ESP32 core **3.3.11**. It installs `dsmr3Lib` (not `dsmr2Lib`) plus the other sketch libraries and artifacts `version-manifest.json` plus `DSMR-API-V{version}_8Mb.bin`. It does **not** FTP or USB-flash.
 
 1. GitHub → Actions → **Compile Ultra** → Run workflow.
 2. Leave **ota_channel** = `production` (default URL) or choose `test` to bake `.../ultra/test/`.
@@ -287,7 +287,7 @@ Or stage an already-compiled `.bin`:
 python3 tools/publish_ota.py --firmware path/to/compiled.bin --out dist/ultra
 ```
 
-This fork is on `5.8.7`; bump `_VERSION_FORK` in `version.h` for each Ultra OTA release (`5.8.7.1`, `5.8.7.2`, …).
+This fork is on vendor `5.9.5`; bump `_VERSION_FORK` in `version.h` for each Ultra OTA release (`5.9.5.1`, `5.9.5.2`, …).
 
 Cloud agents and GitHub Actions **cannot USB-flash** a dongle. Flash the downloaded `.bin` locally (Arduino IDE / `esptool` / web installer) if you need a first image on hardware.
 

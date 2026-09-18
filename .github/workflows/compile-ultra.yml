@@ -35,6 +35,9 @@ jobs:
       - name: Install arduino-cli
         uses: arduino/setup-arduino-cli@v2
 
+      - name: Check Ultra compile config
+        run: python3 tools/test_compile_ultra.py
+
       - name: Compile Ultra and stage OTA files
         env:
           OTA_CHANNEL: ${{ github.event.inputs.ota_channel || 'production' }}

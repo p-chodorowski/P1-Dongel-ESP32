@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Compile Ultra firmware (ESP32-S3, 8MB / default_8MB) and stage OTA files.
 
+Board options come from sketch.yaml default_fqbn (Arduino IDE Tools for ULTRA).
+Libraries match the sketch includes / docs/BUILDING.md (dsmr3Lib since 5.9.0).
+
 Does not upload or USB-flash. GitHub Actions runs this and artifacts the output.
 
   python3 tools/compile_ultra.py --out dist/ultra
@@ -12,16 +15,32 @@ from __future__ import annotations
 import argparse
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from publish_ota import dest_bin_name, parse_version, publish
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI_CONFIG = Path(__file__).resolve().parent / "arduino-cli.yaml"
+SKETCH_YAML = ROOT / "sketch.yaml"
 SKETCH = ROOT
-FQBN = "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc,PSRAM=disabled"
-ESP32_CORE = "esp32:esp32@3.3.10"
+# Upstream 5.8.11+; 5.9.x firmware is built against this pin.
+ESP32_CORE = "esp32:esp32@3.3.11"
+
+
+def load_default_fqbn(path: Path = SKETCH_YAML) -> str:
+    """Read the Ultra FQBN from sketch.yaml so CI matches Arduino IDE Tools."""
+    if not path.is_file():
+        raise SystemExit(f"sketch.yaml missing at {path}")
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("default_fqbn:"):
+            fqbn = line.split(":", 1)[1].strip()
+            if fqbn:
+                return fqbn
+    raise SystemExit(f"default_fqbn missing in {path}")
+
+
+FQBN = load_default_fqbn()
 
 REGISTRY_LIBS = (
     "ArduinoJson",
@@ -34,7 +53,7 @@ REGISTRY_LIBS = (
 )
 
 GIT_LIBS = (
-    "https://github.com/mhendriks/dsmr2Lib.git",
+    "https://github.com/mhendriks/dsmr3Lib.git",
     "https://github.com/eModbus/eModbus.git",
     "https://github.com/kmackay/micro-ecc.git",
     "https://github.com/ESP32Async/AsyncTCP.git",
