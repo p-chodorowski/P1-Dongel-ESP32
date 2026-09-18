@@ -36,7 +36,9 @@ class CompileUltraConfigTests(unittest.TestCase):
         self.assertIn("compile_ultra.py", text)
         self.assertIn("test_compile_ultra.py", text)
         self.assertIn("upload-artifact", text)
-        self.assertNotIn("ftp", text.lower())
+        self.assertIn("sftp_ota.py", text)
+        self.assertNotIn("ftp://", text.lower())
+        self.assertNotIn("secrets.FTP_USER", text)
 
     def test_staged_name_is_8mb(self) -> None:
         self.assertEqual(dest_bin_name("5.9.5.1"), "DSMR-API-V5.9.5.1_8Mb.bin")
