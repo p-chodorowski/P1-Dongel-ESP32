@@ -36,18 +36,15 @@ class CompileUltraConfigTests(unittest.TestCase):
     def test_git_libs_include_asynctcp_for_emodbus(self) -> None:
         self.assertTrue(any("AsyncTCP" in url for url in compile_ultra.GIT_LIBS))
 
-    def test_sketch_does_not_redefine_p1_fixed_reader(self) -> None:
-        """Latest dsmr2Lib already ships dsmr::P1FixedReader (reader2.h) and
-        dsmr2.h does `using namespace dsmr`. A second global P1FixedReader
-        makes Ultra CI fail with: reference to 'P1FixedReader' is ambiguous.
+    def test_p1_fixed_reader_compat_is_guarded(self) -> None:
+        """Older dsmr2Lib (0.1) has no P1FixedReader. The compat header must stay
+        behind DSMR2_HAS_P1_FIXED_READER so a newer library does not get two types.
         """
         root = Path(__file__).resolve().parents[1]
         header = (root / "DSMRloggerAPI.h").read_text(encoding="utf-8")
-        self.assertNotIn("P1FixedReaderCompat.h", header)
-        compat = root / "P1FixedReaderCompat.h"
-        if compat.is_file():
-            text = compat.read_text(encoding="utf-8")
-            self.assertNotIn("class P1FixedReader", text)
+        self.assertIn("P1FixedReaderCompat.h", header)
+        compat = (root / "P1FixedReaderCompat.h").read_text(encoding="utf-8")
+        self.assertIn("DSMR2_HAS_P1_FIXED_READER", compat)
 
 
 if __name__ == "__main__":
