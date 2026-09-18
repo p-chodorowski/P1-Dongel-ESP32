@@ -103,8 +103,11 @@ void writeSettingsDirect() {
   docw["GasVasteKosten"] = settingGNBK;
   docw["WaterVasteKosten"] = settingWNBK;
   docw["OverVoltageThreshold"] = settingOvervoltageThreshold;
+  docw["CTFactor"] = settingCTFactor;
+  docw["VTFactor"] = settingVTFactor;
   docw["MeentInterval"] = settingMeentInterval;
-  docw["MeentToken"] = settingMeentToken;
+  docw["MeentWebId"] = settingMeentWebId;
+  docw["MeentApiKey"] = settingMeentApiKey;
   docw["tap-enabled"] = bTapEnabled;
   docw["TapApiKey"] = settingTapApiKey;
   docw["TapMeterId"] = settingTapMeterId;
@@ -145,6 +148,9 @@ void writeSettingsDirect() {
   docw["mb_baud"] = mb_config.baud;
   docw["mb_parity"] = mb_config.parity - 134217700;
   docw["mb_monitor"] = bModbusMonitor;
+  docw["victron_accu_enabled"] = victronModbusConfig.enabled;
+  docw["victron_accu_ip"] = victronModbusConfig.ip;
+  docw["victron_accu_id"] = victronModbusConfig.id;
   docw["mqtt-hide"] = hideMQTTsettings;
   docw["remove-index"] = RemoveIndexAfterUpdate;
   docw["macid-topic"] = MacIDinToptopic;
@@ -216,6 +222,7 @@ void readSettings(bool show)
     writeSettings();
     return;
   }
+  bool settingsBackfillNeeded = false;
   
   //strcpy(LittleFSTimestamp, doc["Timestamp"]);
   strlcpy(settingHostname, doc["Hostname"] | activeDefaultHostname, sizeof(settingHostname));
@@ -225,17 +232,30 @@ void readSettings(bool show)
   settingERT1 = doc["EnergyReturnedT1"];
   settingERT2 = doc["EnergyReturnedT2"];
   settingGDT = doc["GASDeliveredT"];
-  if (doc["WaterDelivered"].is<bool>()) settingWDT = doc["WaterDelivered"];
+  if (doc["WaterDelivered"].is<float>()) settingWDT = doc["WaterDelivered"];
   settingENBK = doc["EnergyVasteKosten"];
   settingGNBK = doc["GasVasteKosten"];
   if (doc["WaterVasteKosten"].is<float>()) settingWNBK = doc["WaterVasteKosten"];
   if (doc["OverVoltageThreshold"].is<int>()) {
     settingOvervoltageThreshold = constrain(doc["OverVoltageThreshold"].as<int>(), 200, 300);
   }
+  if (doc["CTFactor"].is<int>()) {
+    settingCTFactor = constrain(doc["CTFactor"].as<int>(), (int)METER_FACTOR_MIN, (int)METER_FACTOR_MAX);
+  }
+  if (doc["VTFactor"].is<int>()) {
+    settingVTFactor = constrain(doc["VTFactor"].as<int>(), (int)METER_FACTOR_MIN, (int)METER_FACTOR_MAX);
+  }
   if (doc["MeentInterval"].is<int>()) {
     settingMeentInterval = constrain(doc["MeentInterval"].as<int>(), 1, 3600);
   }
-  if (doc["MeentToken"].is<const char*>()) strlcpy(settingMeentToken, doc["MeentToken"].as<const char*>(), sizeof(settingMeentToken));
+  if (doc["MeentWebId"].is<const char*>()) strlcpy(settingMeentWebId, doc["MeentWebId"].as<const char*>(), sizeof(settingMeentWebId));
+  if (doc["MeentApiKey"].is<const char*>()) {
+    strlcpy(settingMeentApiKey, doc["MeentApiKey"].as<const char*>(), sizeof(settingMeentApiKey));
+  } else if (doc["MeentToken"].is<const char*>()) {
+    // Migration from the pre-provisioning MEENT setting.
+    strlcpy(settingMeentApiKey, doc["MeentToken"].as<const char*>(), sizeof(settingMeentApiKey));
+    settingsBackfillNeeded = true;
+  }
   if (doc["tap-enabled"].is<bool>()) bTapEnabled = doc["tap-enabled"];
   if (doc["TapApiKey"].is<const char*>()) strlcpy(settingTapApiKey, doc["TapApiKey"].as<const char*>(), sizeof(settingTapApiKey));
   if (doc["TapMeterId"].is<const char*>()) strlcpy(settingTapMeterId, doc["TapMeterId"].as<const char*>(), sizeof(settingTapMeterId));
@@ -276,7 +296,8 @@ void readSettings(bool show)
   if (doc["enableHistory"].is<bool>()) EnableHistory = doc["enableHistory"];
   if (doc["watermeter"].is<bool>() ) WtrMtr = doc["watermeter"];
   if (doc["waterfactor"].is<float>()) WtrFactor = doc["waterfactor"];
-  bool settingsBackfillNeeded = !doc["Fuse"].is<int>() || !doc["Phases"].is<int>();
+  settingsBackfillNeeded = settingsBackfillNeeded || !doc["Fuse"].is<int>() || !doc["Phases"].is<int>() ||
+                            !doc["CTFactor"].is<int>() || !doc["VTFactor"].is<int>();
   if (doc["Fuse"].is<int>()) {
     uint8_t newFuse = doc["Fuse"];
     settingFuse = (newFuse == 16 || newFuse == 25 || newFuse == 35) ? newFuse : 25;
@@ -308,6 +329,9 @@ void readSettings(bool show)
   if (doc["mb_baud"].is<int>()) mb_config.baud = doc["mb_baud"];
   if (doc["mb_parity"].is<int>()) mb_config.parity = 134217700 + doc["mb_parity"].as<int>();
   if (doc["mb_monitor"].is<bool>()) bModbusMonitor = doc["mb_monitor"];
+  if (doc["victron_accu_enabled"].is<bool>()) victronModbusConfig.enabled = doc["victron_accu_enabled"];
+  if (doc["victron_accu_ip"].is<const char*>()) strlcpy(victronModbusConfig.ip, doc["victron_accu_ip"].as<const char*>(), sizeof(victronModbusConfig.ip));
+  if (doc["victron_accu_id"].is<int>()) victronModbusConfig.id = constrain(doc["victron_accu_id"].as<int>(), 1, 247);
   if (doc["skip-network"].is<bool>()) skipNetwork = doc["skip-network"];
   if (doc["mimic"].is<int>()) {
     int newMimic = constrain(doc["mimic"].as<int>(), (int)MIMIC_NONE, (int)MIMIC_SHELLY_PRO_3EM);
@@ -387,6 +411,12 @@ void updateSetting(const char *field, const char *newValue)
       settingOvervoltageThreshold = newThreshold;
       ResetOvervoltageStats();
     }
+  }
+  if (!stricmp(field, "ct_factor")) {
+    settingCTFactor = constrain(String(newValue).toInt(), (int)METER_FACTOR_MIN, (int)METER_FACTOR_MAX);
+  }
+  if (!stricmp(field, "vt_factor")) {
+    settingVTFactor = constrain(String(newValue).toInt(), (int)METER_FACTOR_MIN, (int)METER_FACTOR_MAX);
   }
   if (!stricmp(field, "meent_interval")) {
     settingMeentInterval = constrain(String(newValue).toInt(), 1, 3600);
@@ -486,7 +516,16 @@ void updateSetting(const char *field, const char *newValue)
   
   if (!stricmp(field, "b_auth_user")) strCopy(bAuthUser,25, newValue);  
   if (!stricmp(field, "b_auth_pw")) strCopy(bAuthPW,25, newValue); 
-  if (!stricmp(field, "meent_token")) strCopy(settingMeentToken, sizeof(settingMeentToken), newValue);
+  if (!stricmp(field, "meent_webid")) {
+    const bool changed = strncmp(settingMeentWebId, newValue, sizeof(settingMeentWebId)) != 0;
+    strCopy(settingMeentWebId, sizeof(settingMeentWebId), newValue);
+    if (changed) settingMeentApiKey[0] = '\0'; // An API key belongs to one WebID.
+    if (changed) MeentConfigChanged();
+  }
+  if (!stricmp(field, "meent_api_key")) {
+    strCopy(settingMeentApiKey, sizeof(settingMeentApiKey), newValue);
+    MeentConfigChanged();
+  }
   if (!stricmp(field, "tap_api_key")) strCopy(settingTapApiKey, sizeof(settingTapApiKey), newValue);
   if (!stricmp(field, "tap_meter_id")) strCopy(settingTapMeterId, sizeof(settingTapMeterId), newValue);
 
@@ -545,11 +584,34 @@ void updateSetting(const char *field, const char *newValue)
   #endif
 
   if (!stricmp(field, "mb_map")) setModbusMapping(String(newValue).toInt());  
-  if (!stricmp(field, "mb_id")) mb_config.id = String(newValue).toInt();  
+  if (!stricmp(field, "mb_id")) {
+    uint8_t oldModbusId = mb_config.id;
+    uint8_t newModbusId = constrain(String(newValue).toInt(), 1, 255);
+    if (oldModbusId != newModbusId) {
+      mb_config.id = newModbusId;
+      updateModbusServerId(oldModbusId, newModbusId);
+    }
+  }
   if (!stricmp(field, "mb_port")) mb_config.port = String(newValue).toInt();  
   if (!stricmp(field, "mb_baud")) mb_config.baud = String(newValue).toInt();  
   if (!stricmp(field, "mb_parity")) mb_config.parity = String(newValue).toInt();  
   if (!stricmp(field, "mb_monitor")) bModbusMonitor = (stricmp(newValue, "true") == 0 ? true : false);
+  bool victronConfigChanged = false;
+  if (!stricmp(field, "victron_accu_enabled")) {
+    victronModbusConfig.enabled = (stricmp(newValue, "true") == 0);
+    victronConfigChanged = true;
+  }
+  if (!stricmp(field, "victron_accu_ip")) {
+    strCopy(victronModbusConfig.ip, sizeof(victronModbusConfig.ip), newValue);
+    victronConfigChanged = true;
+  }
+  if (!stricmp(field, "victron_accu_id")) {
+    victronModbusConfig.id = constrain(String(newValue).toInt(), 1, 247);
+    victronConfigChanged = true;
+  }
+#ifdef MBUS
+  if (victronConfigChanged) victronModbusConfigChanged();
+#endif
   if (!stricmp(field, "mimic")) {
     int newMimic = constrain(String(newValue).toInt(), (int)MIMIC_NONE, (int)MIMIC_SHELLY_PRO_3EM);
     reboot_required = (mimicType != newMimic);

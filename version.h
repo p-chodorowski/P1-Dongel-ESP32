@@ -6,8 +6,8 @@
 #define P1_STR(x) P1_STR1(x)
 
 #define _VERSION_MAJOR 5
-#define _VERSION_MINOR 8
-#define _VERSION_PATCH 7
+#define _VERSION_MINOR 9
+#define _VERSION_PATCH 5
 #ifndef _VERSION_FORK
 #define _VERSION_FORK 1
 #endif

@@ -48,11 +48,6 @@ bool auth() {
   return true;
 }
 
-int shellyRpcRequestId() {
-  if (!httpServer.hasArg("id")) return 1;
-  return httpServer.arg("id").toInt();
-}
-
 void serveStaticWithAuth(const char* uri, const char* fileName) {
   httpServer.on(uri, HTTP_GET, [fileName]() {
     if (!auth()) return;
@@ -89,7 +84,12 @@ static void handleApiSmFieldGet() {
 
 static void handleRootGet() {
   if (!auth()) return;
-  EnsureIndexFilePresent();
+  if (!EnsureIndexFilePresent()) {
+    FSNotPopulated = true;
+    httpServer.send(503, "text/plain", F("Frontend unavailable, retry later\r\n"));
+    return;
+  }
+  FSNotPopulated = false;
 
   File file = LittleFS.open(settingIndexPage, "r");
   if (file) {
@@ -116,8 +116,8 @@ static void handleHttpNotFound() {
 
   bool handle = handleFile(filename.c_str());
   if (filename == "/" && !handle) {
-    httpServer.sendHeader("Location", "/#DashTab", true);
-    httpServer.send(303, "text/plain", "");
+    handleRootGet();
+    return;
   }
   if (!handle) httpServer.send(404, "text/plain", F("FileNotFound\r\n"));
 }
@@ -125,11 +125,11 @@ static void handleHttpNotFound() {
 void setupFSexplorer() { 
 
 #if !DIRECT_AP_CONNECT
+  httpServer.on("/", HTTP_GET, handleRootGet);
   if (FSNotPopulated) {
-    DebugTln(F("FS not populated -> API operation only\r"));
+    DebugTln(F("FS not populated -> frontend recovery enabled\r"));
   } else {
     DebugTln(F("FS correct populated -> normal operation!\r"));
-    httpServer.on("/", HTTP_GET, handleRootGet);
     httpServer.serveStatic("/", LittleFS, settingIndexPage);
   }
 #else
@@ -398,7 +398,7 @@ void doRedirect(String msg, int wait, const char* URL, bool reboot, bool resetWi
   {
     for (uint8_t i = 0; i < 100; i++) { 
       delay(50); 
-      httpServer.handleClient();
+      handleHttpServerClient();
     }
     if (resetWifi) 
     {   

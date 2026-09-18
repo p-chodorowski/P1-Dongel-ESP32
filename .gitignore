@@ -17,3 +17,5 @@ build
 *.zip
 .htaccess
 .cursor/
+__pycache__/
+*.pyc

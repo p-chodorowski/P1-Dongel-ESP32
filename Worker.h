@@ -11,15 +11,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
-#define WORKER_QUEUE_HIGH_LEN    8
-#define WORKER_QUEUE_NORMAL_LEN 16
-#define WORKER_QUEUE_LOW_LEN    16
-#define WORKER_HIGH_BUDGET       5
-#define WORKER_STACK_BYTES    (1024 * 8)
+#define WORKER_QUEUE_NORMAL_LEN  8
+#define WORKER_QUEUE_LOW_LEN     8
+#define WORKER_STACK_BYTES   (1024 * 12)
 
 enum WorkerPriority : uint8_t {
-  WORKER_PRIO_HIGH = 0,
-  WORKER_PRIO_NORMAL,
+  WORKER_PRIO_NORMAL = 0,
   WORKER_PRIO_LOW
 };
 
@@ -30,6 +27,7 @@ enum WorkerJobType : uint8_t {
   WORKER_JOB_P1_STATUS_WRITE,
   WORKER_JOB_RNG_WRITE,
   WORKER_JOB_HTTP_POST,
+  WORKER_JOB_MEENT_PROVISION,
   WORKER_JOB_MANIFEST_CHECK,
   WORKER_JOB_SOLAR_FETCH,
   WORKER_JOB_TAP_POST
@@ -44,7 +42,17 @@ struct WorkerWebhookPayload {
   uint64_t id;
   int32_t pFromGrid;
   int32_t pToGrid;
+  uint64_t t1;
+  uint64_t t2;
+  uint64_t t1r;
+  uint64_t t2r;
   time_t timestamp;
+#ifdef POST_KEMP
+  uint32_t voltage[3];
+  uint32_t voltageSags[3];
+  uint32_t voltageSwells[3];
+  uint8_t sagSwellPresentMask;
+#endif
 };
 
 struct WorkerTapPayload {
@@ -72,7 +80,6 @@ struct WorkerJob {
     WorkerWebhookPayload webhook;
     WorkerTapPayload tap;
     WorkerRngPayload rng;
-    uint8_t raw[112];
   } data;
 };
 

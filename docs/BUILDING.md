@@ -1,6 +1,6 @@
 # Building Notes
 
-This project expects a few local/private headers outside the repo and a compatible `dsmr2Lib` version.
+This project expects a few local/private headers outside the repo and a compatible `dsmr3Lib` version.
 
 ## 1) Local `_secrets` headers (optional but expected by default)
 
@@ -32,15 +32,32 @@ Create `../../_secrets/posts.h` with at least:
 // Only needed when POST_POWERCH is enabled
 #define URL_POWERCH "https://example.invalid/api/power"
 
-// Only needed when POST_MEENT is enabled
-#define URL_MEENT "https://meent.dev.muze.nl/api/data/"
+// Optional override when POST_MEENT is enabled. By default DEBUG uses the
+// MEENT staging API and release firmware uses the production API.
+#define MEENT_API_BASE_URL "https://meent.dev.muze.nl/api/"
+
+// Only needed when POST_KEMP is enabled
+#define URL_KEMP "https://example.invalid/api/data"
+#define KEMP_API_KEY "replace-with-your-api-key"
 ```
 
 Notes:
 - `OTAURL_PREFIX` is used in `DSMRloggerAPI.h` to build `BaseOTAurl`.
 - If `POST_POWERCH` is not enabled, `URL_POWERCH` is not used.
-- If `POST_MEENT` is not enabled, `URL_MEENT` is not used.
-- `POST_POWERCH` and `POST_MEENT` are mutually exclusive compile-time features.
+- If `POST_MEENT` is not enabled, `MEENT_API_BASE_URL` is not used.
+- If `POST_KEMP` is not enabled, `URL_KEMP` and `KEMP_API_KEY` are not used.
+- `POST_POWERCH`, `POST_MEENT`, and `POST_KEMP` are mutually exclusive compile-time features.
+- `POST_KEMP` uses a fixed 60-second POST interval and the OTA suffix `kemp/` (for example `p1p/v5/kemp/`).
+
+## MEENT provisioning secret
+
+MEENT builds create a cryptographically random 32-byte client secret before the
+first pod/API-key request. It is stored in NVS (separate from the settings
+file) and sent only to `/api/pod/` and `/api/register/` in the
+`X-Client-Secret` header. The MEENT provider should store a hash of this secret
+and use it to make interrupted provisioning requests idempotent. Override the
+header name with `MEENT_CLIENT_SECRET_HEADER` in `posts.h` if the provider
+chooses another name. A factory reset removes the secret deliberately.
 
 ## 3) Example `energyid.h`
 
@@ -178,7 +195,43 @@ and translated labels; new settings still require a firmware flash.
 
 Do not hardcode hardware profile defines in `P1-Dongel-ESP32.ino` when using `build.sh`.
 
-Use `build.sh` to compile all profiles. It injects profile-specific defines and board settings, including:
+Use `build.sh` to compile all profiles by default:
+
+```bash
+./build.sh
+```
+
+You can also compile one or more selected profiles:
+
+```bash
+./build.sh ULTRA
+./build.sh P1P ETH_P1EP
+```
+
+Add `--clear-cache` or `--clean` to remove the selected profile build directories before compiling:
+
+```bash
+./build.sh --clear-cache ULTRA
+```
+
+Extra Arduino build properties can be passed through as well. For `compiler.cpp.extra_flags`, the value is appended to the profile flags:
+
+```bash
+./build.sh ULTRA --extra-flags "-DWEBSOCKETS_TCP_TIMEOUT=2000"
+./build.sh ULTRA --build-property compiler.cpp.extra_flags="-DWEBSOCKETS_TCP_TIMEOUT=2000"
+```
+
+### Sketch-local compiler options
+
+The ESP32 Arduino core reads compiler options from `build_opt.h` in the sketch root. This project uses it to disable C++ exceptions without changing the globally installed ESP32 platform:
+
+```text
+-fno-exceptions
+```
+
+Arduino IDE and `arduino-cli` both apply this file automatically. A `platform.local.txt` in the sketch root is not supported; that file is only read next to the installed ESP32 `platform.txt`. Unlike `platform.local.txt`, `build_opt.h` is project-specific and remains part of the repository when the ESP32 core is updated.
+
+The script injects profile-specific defines and board settings, including:
 
 - ESP32-C3 builds must always use the `Minimal SPIFFS` partition scheme (`OTA 1.9MB / 128KB SPIFFS`).
 - ESP32-S3 builds must always use the 8MB partition scheme (`FlashSize=8M`, `PartitionScheme=default_8MB`, OTA 3MB / matching 8MB layout).
@@ -260,8 +313,12 @@ These headers come from the ESP32 board support package rather than a separate A
   Repo: <https://github.com/PaulStoffregen/Time>
 - `TelnetStream` (`TelnetStream.h`)
   Repo: <https://github.com/jandrassy/TelnetStream>
-- `dsmr2Lib` (`dsmr2.h`)
-  Repo: <https://github.com/mhendriks/dsmr2Lib>
+- `dsmr3Lib` (`dsmr3.h`)
+  Repo: <https://github.com/mhendriks/dsmr3Lib>
+  DSMR-API 5.9.0 and newer require dsmr3Lib 1.0.0 or a newer compatible
+  release. The firmware uses the v3-only `P1FieldWarning`, `P1Diagnostics` and
+  `CompleteRaw(String&)` APIs; dsmr2Lib cannot be substituted without
+  reverting those integrations.
 - `WiFiManager` (`WiFiManager.h`)
   Repo: <https://github.com/tzapu/WiFiManager>
 - `CRC32` (`CRC32.h`)

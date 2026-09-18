@@ -13,7 +13,6 @@ BACKLOG
 - Harold B: dynamische tarieven dus de onderverdeling naar Tarief 1 en 2 is niet relevant. (Overigens de P1-meter levert wel twee standen aan). Persoonlijk vind ik de grafieken onleesbaar worden (ik lever ook terug) vier verschillende kleurtjes groen en vier kleurtjes rood. Dus het heeft mijn voorkeur om dit onderscheid in de grafieken achterwege te laten. Dus als dat aan te sturen zou zijn via de instellingen, heel graag!
 - front-end: issue Stroom ( terug + afname bij 3 fase wordt opgeteled ipv - I voor teruglevering )
 - RNGhours files vergroten (nu 48h -> 336h) (Broes)
-- eigen NTP kunnen opgeven of juist niet (stopt pollen)
 - detect and repair issues RNG files
 - Daily Insights: Inzichten vanaf opstarten dongle / 00:00 reset
     - loadbalancing over de fases heen
@@ -23,8 +22,8 @@ BACKLOG
 - inlezen van solar config in frontend
 - issue cost gas 4.16/5.2 (Karel)
 - De waarden in daily insights labelen met het datum/tijdstip waarop gemeten (Harrie)
-- one hostname for all dongles (V6)
 - add tempature  in price cap (A van Dijken) = lat / long of location selection 
+- support new smart meter change
 
 Default checks
 - wifi
@@ -66,17 +65,29 @@ Arduino IDE Tools settings (must match the active #define profile below):
   Shared: Core Debug Level "None". Port: select the dongle COM port.
   These FQBNs also live in sketch.yaml (arduino-cli default_fqbn = ULTRA).
 
-5.9.0
-- SDK 3.3.10
+5.10...
+- Normalise energy data (huge change)
+- dynamic prices 
 - 3 button control (a-pair, b-reboot, c=factory reset)
-- tooltips bij de diverse settings (Gerben)
-- Add remote Proxy
-- refactoring targets
+- installer web popup via branded popup
+- refactor hardware/build targets and profile configuration
 - add wallbox mapping
-- kWh meter als bron voor productie data gebruiken (Harrie)
-- update button in HA to trigger the update (mqtt based #70) 
-   - HA auto update ala : https://www.zigbee2mqtt.io/guide/usage/ota_updates.html#automatic-checking-for-available-updates
 - extra report "jaarbalans": op basis van nog te verwachten maandnw ( Leo B )
+- max 3 solar systemen ondersteunen. Max 3 x zelfde of variaties zijn.  
+
+5.10.0
+- add option to see total counter remotely
+- stable or beta update option in settings
+- Add remote Proxy
+- tooltips bij de diverse settings (Gerben)
+- option for NRG Monitor to show small project image
+- control center which shows the status of a connection (MQTT/EID/P1/HAN/...)
+
+6.0.0 
+- one hostname for all dongles
+- sources / targets setup - EMS structure
+- kWh meter als bron voor productie data gebruiken (Harrie)
+- refactoring api's (less / atomic / no units)
 
 */
 
@@ -104,13 +115,15 @@ Arduino IDE Tools settings (must match the active #define profile below):
 // #define UDP_BCAST
 // #define USB_CONFIG
 // #define POST_POWERCH
-// #define POST_MEENT
+#define POST_MEENT   
+// #define POST_KEMP
 // #define VIRTUAL_P1
 // #define HAN_READER
 // #define HAN_TESTDATA
 // #define HAN_TESTDATA_RAW
 // #define HAN_TESTDATA_DYNAMIC
 // #define DIRECT_AP_CONNECT 1
+// #define ENABLE_CRASH_BREADCRUMBS 1
 
 #include "DSMRloggerAPI.h"
 #include <esp_task_wdt.h>
@@ -130,10 +143,14 @@ void setup()
   WDT_FEED();
   lastReset = getResetReason();
   DebugT(F("Last reset reason: ")); Debugln(lastReset);
+  CrashLogBegin(lastReset.c_str());
+  CrashLogPrint();
   DebugFlush();
 //================ File System =====================================
   if ( LittleFS.begin(true) ) { DebugTln(F("FS Mount OK\r")); FSmounted = true;  } 
   else DebugTln(F("!!!! FS Mount ERROR\r"));   // Serious problem with File System 
+  CrashLogPersistAbnormalReset();
+  CrashLogMark("boot", __LINE__);
   WDT_FEED();
 //================ Status update ===================================
   WorkerBegin();
@@ -181,6 +198,7 @@ void setup()
 
 #ifdef MBUS
   mbusSetup();
+  setupVictronModbus();
   SetupMB_RTU();
 #endif  
   ReadSolarConfigs();
@@ -202,7 +220,7 @@ void setup()
 
 void loop () { 
   esp_task_wdt_reset();
-  httpServer.handleClient();
+  handleHttpServerClient();
   handleApiWebSocket();
   if ( DUE(StatusTimer) && (telegramCount > 2) ) { 
     P1StatusWrite();
@@ -214,6 +232,9 @@ void loop () {
   WifiWatchDog();
   handleRemoteUpdate();
   handleWater();
+#ifdef MBUS
+  handleVictronModbus();
+#endif
   handleEnergyID();  
   GetSolarDataN();
   handleRawPort();

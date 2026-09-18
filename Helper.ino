@@ -14,9 +14,12 @@
 #include "esp_efuse.h"
 #include "esp_efuse_table.h"
 
+#define P1P_H20_B   3
+#define P1P_H20_2   4
+
 // ------------------ ENUMS & CONSTANTS ------------------ //
-enum HWtype { UNDETECTED, P1P, NRGD, P1E, P1EP, P1UM, P1U, NRGM, P1S, P1UX2, NRGDH, D1MC };
-const char* const HWTypeNames[]  = { "N/A", "P1P", "NRGD", "P1E", "P1EP", "P1UM", "P1U", "NRGM", "P1S", "P1UX2", "NRGDH", "D1MC" };
+enum HWtype { UNDETECTED, P1P, NRGD, P1E, P1EP, P1UM, P1U, NRGM, P1S, P1UX2, NRGDH, D1MC, W1MC };
+const char* const HWTypeNames[]  = { "N/A", "P1P", "NRGD", "P1E", "P1EP", "P1UM", "P1U", "NRGM", "P1S", "P1UX2", "NRGDH", "D1MC", "W1MC" };
 const char* const ModTypeNames[] = { "N/A", "IO+", "H2O", "RS485" };
 
 // ------------------ GLOBAL VARIABLES ------------------ //
@@ -173,6 +176,10 @@ void DetectModule() {
             active_mod_conf = &module_config[0];
             DetectModule(0); ActivateModule(0);
             break;
+    case W1MC:
+            active_mod_conf = &module_config[4];
+            DetectModule(0); ActivateModule(0);
+            break;
 #ifdef ULTRA
     case P1UX2:
             // if (HardwareVersion >= 101) pinWriteIfValid(dc.eth_rst, HIGH);   // disable W5500 RESET only 1.1+ hardware
@@ -243,6 +250,26 @@ void DevTypeMapping(){
   UseRGB    = (dc.rgb >= 0);
   IOWater   = dc.water;
 
+  #ifndef ULTRA
+  if (HardwareType == P1P) { // Check for legacy P1P versions
+    switch ( P1Status.dev_type ) {
+      case P1P_H20_B:  UseRGB = true;
+                       statusled = -1;
+                       rgbled_io = 8;
+                       IOWater = 0;
+                       WtrMtr = true;
+                       break;
+      case P1P_H20_2:  UseRGB = false;
+                       IOWater = 3;
+                       RxP1 = 4;
+                       TxO1 = 10;
+                       P1Out = true;
+                       WtrMtr = true;
+                       break;
+    } 
+  }
+#endif
+
   DebugTf(
     "Pins: button=%d RGB=%d statusLED=%d Rx=%d HanIO=%d Tx=%d DTR=%d LED_out=%d P1Out=%d Water=%d UseRGB=%d Hostname=%s\n",
     button_io, rgbled_io, statusled, RxP1, HanIO, TxO1, DTR_out, LED_out, P1Out, IOWater, UseRGB, settingHostname
@@ -280,6 +307,7 @@ void SetConfig(){
 void FacReset() {
   DebugTln(F("/!\\ Factory reset"));
 //  bFacReset = false;
+  MeentClearClientSecret(); // A reset must not retain ownership of the old pod.
   P1StatusClear();
   LittleFS.remove("/DSMRsettings.json");
   LittleFS.remove("/fixedip.json");
@@ -313,10 +341,12 @@ static uint32_t monoOverrideLastToggleMs = 0;
 
 static void setRgbColor(uint32_t color) {
   ClearRGB();
+  const uint8_t brightness = (HardwareType == W1MC) ? 250 : BRIGHTNESS;
   switch ( color ) {
-    case LED_RED:   R_value = BRIGHTNESS; break;
-    case LED_GREEN: G_value = BRIGHTNESS; break;
-    case LED_BLUE:  B_value = BRIGHTNESS; break;
+    case LED_RED:   R_value = brightness; break;
+    case LED_GREEN: G_value = brightness; break;
+    case LED_BLUE:  B_value = brightness; break;
+    case LED_WHITE: R_value = brightness; G_value = brightness; B_value = brightness; break;
   }
 }
 

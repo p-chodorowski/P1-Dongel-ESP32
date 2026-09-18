@@ -39,6 +39,12 @@ struct {
   uint16_t port = 502;
 } mb_config;
 
+struct VictronModbusConfig {
+  bool enabled = false;
+  char ip[16] = "";
+  uint8_t id = 100;
+} victronModbusConfig;
+
 #include <WiFi.h>  
 // #include "Insights.h"
 #include <WiFiClientSecure.h>        
@@ -50,8 +56,7 @@ struct {
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 #include <Preferences.h>
-#include <dsmr2.h>               // https://github.com/mhendriks/dsmr2Lib
-#include "P1FixedReaderCompat.h" // drop when local dsmr2Lib defines P1FixedReader
+#include <dsmr3.h>               // https://github.com/mhendriks/dsmr3Lib
 #include "esp_chip_info.h"
 #include <esp_now.h>             //https://randomnerdtutorials.com/esp-now-auto-pairing-esp32-esp8266/
 #include <esp_task_wdt.h>
@@ -74,6 +79,7 @@ struct ApiRequestContext {
 
 #ifdef MBUS
   #include "ModbusServerWiFi.h"
+  #include "ModbusClientTCP.h"
 #endif
 
 #define JSON_BUFF_MAX     255
@@ -128,12 +134,17 @@ class SmartMeterHandle {
     return isHan() ? han_.CompleteRaw() : dsmr_.CompleteRaw();
   }
 
+  bool CompleteRaw(String& destination) {
+    return isHan() ? han_.CompleteRaw(destination)
+                   : dsmr_.CompleteRaw(destination);
+  }
+
   String raw() {
     return isHan() ? han_.raw() : dsmr_.raw();
   }
 
   size_t rawLength() {
-    return isHan() ? han_.raw().length() : dsmr_.rawLength();
+    return isHan() ? han_.frameLength() : dsmr_.rawLength();
   }
 
   void clear() {
@@ -156,6 +167,12 @@ class SmartMeterHandle {
     return isHan() ? han_.parse(data, err) : dsmr_.parse(data, err);
   }
 
+  template<typename TData>
+  bool parse(TData* data, String* err, P1FieldWarning* fieldWarning) {
+    return isHan() ? han_.parse(data, err)
+                   : dsmr_.parse(data, err, false, fieldWarning);
+  }
+
  private:
   P1FixedReader<2500>& dsmr_;
   han::HanReader& han_;
@@ -169,6 +186,17 @@ SmartMeterHandle smartMeter(slimmeMeter, hanMeter);
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 void LogFile(const char* payload, bool toDebug = false);
+#if ENABLE_CRASH_BREADCRUMBS
+void CrashLogBegin(const char* resetReason);
+void CrashLogMark(const char* tag, uint16_t line = 0);
+void CrashLogPrint();
+void CrashLogPersistAbnormalReset();
+#else
+static inline void CrashLogBegin(const char*) {}
+static inline void CrashLogMark(const char*, uint16_t = 0) {}
+static inline void CrashLogPrint() {}
+static inline void CrashLogPersistAbnormalReset() {}
+#endif
 bool EnsureIndexFilePresent();
 void P1StatusWrite();
 void P1StatusWriteDirect();
@@ -178,12 +206,18 @@ void writeRingFiles();
 void writeSettings();
 void writeSettingsDirect();
 void applyTimezoneSetting();
+void MeentConfigChanged();
+void AppendMeentStatus(JsonDocument& doc);
+void MeentClearClientSecret();
 void ManifestCheckFromWorker();
+void RequestManifestCheckOnMQTTConnect();
 void RemoteUpdate();
 bool QueueRemoteUpdate(const char* versie, bool sketch);
 bool RemoteUpdateAvailable(const char* versie, String* errorDetail = nullptr);
 bool RemoteUpdateNow(const char* versie, bool sketch, String* errorDetail = nullptr);
+const char* LatestFirmwareVersion();
 void AppendRemoteUpdateStatus(JsonDocument& doc);
+void MQTTSetHAUpdateState(bool inProgress, uint8_t progress = 0);
 void P1Reboot();
 void EIDPostHello(ApiResponse* response = nullptr);
 void SendTariffData();
@@ -192,8 +226,60 @@ uint32_t actueleOverspanningSeconden(uint32_t overspanningTotaal, unsigned long 
 void ResetOvervoltageStats();
 String smActualJsonDebug();
 
-WebServer httpServer(80);
-WebSocketsServer apiWs(81);
+class ApiWebSocketsServer : public WebSocketsServer {
+ public:
+  ApiWebSocketsServer(uint16_t port, const String& origin = "", const String& protocol = "arduino")
+      : WebSocketsServer(port, origin, protocol) {}
+
+  void forceDisconnect(uint8_t clientNum) {
+    if (clientNum >= WEBSOCKETS_SERVER_CLIENT_MAX) return;
+    WSclient_t* client = &_clients[clientNum];
+    if (clientIsConnected(client)) WebSocketsServerCore::clientDisconnect(client);
+  }
+
+  bool clientCanWrite(uint8_t clientNum, uint32_t timeoutMs) {
+    if (clientNum >= WEBSOCKETS_SERVER_CLIENT_MAX) return false;
+    WSclient_t* client = &_clients[clientNum];
+    if (!clientIsConnected(client) || !client->tcp) return false;
+
+    int fd = client->tcp->fd();
+    if (fd < 0) return false;
+
+    fd_set writeSet;
+    FD_ZERO(&writeSet);
+    FD_SET(fd, &writeSet);
+
+    struct timeval timeout;
+    timeout.tv_sec = timeoutMs / 1000;
+    timeout.tv_usec = (timeoutMs % 1000) * 1000;
+
+    int res = select(fd + 1, nullptr, &writeSet, nullptr, &timeout);
+    return res > 0 && FD_ISSET(fd, &writeSet);
+  }
+};
+
+class RecoverableWebServer : public WebServer {
+ public:
+  RecoverableWebServer(int port) : WebServer(port) {}
+
+  bool recoverStaleWaitRead(uint32_t minAgeMs) {
+    if (_currentStatus != HC_WAIT_READ) return false;
+    if ((uint32_t)(millis() - _statusChange) < minAgeMs) return false;
+
+    int fd = _currentClient.fd();
+    if (fd >= 0 && _currentClient.connected()) return false;
+
+    if (fd >= 0) _currentClient.stop();
+    _currentClient = NetworkClient();
+    _currentStatus = HC_NONE;
+    _statusChange = millis();
+    return true;
+  }
+};
+
+RecoverableWebServer httpServer(80);
+volatile bool httpServerHandleActive = false;
+ApiWebSocketsServer apiWs(81);
 NetServer ws_raw(82);
 
 // time_t tWifiLost        = 0;
@@ -310,12 +396,14 @@ using MyData = ParsedData<
 //  /* uint32_t */              ,electricity_failures
 //  /* uint32_t */              ,electricity_long_failures
 //  /* String */                ,electricity_failure_log
-//  /* uint32_t */              ,electricity_sags_l1
-//  /* uint32_t */              ,electricity_sags_l2
-//  /* uint32_t */              ,electricity_sags_l3
-//  /* uint32_t */              ,electricity_swells_l1
-//  /* uint32_t */              ,electricity_swells_l2
-//  /* uint32_t */              ,electricity_swells_l3
+#ifdef POST_KEMP
+  /* uint32_t */              ,electricity_sags_l1
+  /* uint32_t */              ,electricity_sags_l2
+  /* uint32_t */              ,electricity_sags_l3
+  /* uint32_t */              ,electricity_swells_l1
+  /* uint32_t */              ,electricity_swells_l2
+  /* uint32_t */              ,electricity_swells_l3
+#endif
 //  /* String */                ,message_short
 //  /* String */                ,message_long
   /* FixedValue */            ,voltage_l1
@@ -494,7 +582,11 @@ int8_t      HanIO = -1;
 int8_t      button_io = IO_BUTTON;
 bool        bNRGMenabled = false;
 #ifdef NETSWITCH
+#ifdef POST_MEENT
+bool        bNETSWenabled = false;
+#else
 bool        bNETSWenabled = true;
+#endif
 #endif
 
 #ifdef UDP_BCAST
@@ -519,8 +611,12 @@ IPAddress ipDNS, ipGateWay, ipSubnet;
 float     settingEDT1 = 0.1, settingEDT2 = 0.2, settingERT1 = 0.3, settingERT2 = 0.4, settingGDT = 0.5, settingWDT = 1.04;
 float     settingENBK = 29.62, settingGNBK = 17.30,settingWNBK = 55.05;
 uint16_t  settingOvervoltageThreshold = 253;
+uint16_t  settingCTFactor = 1;
+uint16_t  settingVTFactor = 1;
 uint16_t  settingMeentInterval = 300;
-char      settingMeentToken[256] = "";
+// MEENT provisioning must survive a reboot: the provider returns each value once.
+char      settingMeentWebId[256] = "";
+char      settingMeentApiKey[128] = "";
 bool      bTapEnabled = false;
 char      settingTapApiKey[256] = "";
 char      settingTapMeterId[64] = "";
@@ -540,6 +636,62 @@ bool      skipNetwork = false;
 bool      allowSkipNetworkByButton = false;
 bool      try_calc_i = true;
 
+static constexpr uint16_t METER_FACTOR_MIN = 1;
+static constexpr uint16_t METER_FACTOR_MAX = 1000;
+
+inline uint32_t outputPowerFactor() {
+  return (uint32_t)settingCTFactor * (uint32_t)settingVTFactor;
+}
+
+inline float outputCurrent(float rawValue) {
+  return rawValue * (float)settingCTFactor;
+}
+
+inline float outputVoltage(float rawValue) {
+  return rawValue * (float)settingVTFactor;
+}
+
+inline float outputPower(float rawValue) {
+  return rawValue * (float)outputPowerFactor();
+}
+
+inline float outputEnergy(float rawValue) {
+  return rawValue * (float)outputPowerFactor();
+}
+
+inline uint64_t outputEnergyUint64(uint64_t rawValue) {
+  const uint64_t factor = outputPowerFactor();
+  if (rawValue > UINT64_MAX / factor) return UINT64_MAX;
+  return rawValue * factor;
+}
+
+inline uint32_t outputEnergyUint32(uint32_t rawValue) {
+  const uint64_t scaled = outputEnergyUint64(rawValue);
+  return scaled > UINT32_MAX ? UINT32_MAX : (uint32_t)scaled;
+}
+
+inline int32_t outputPowerInt(int64_t rawValue) {
+  int64_t scaled = rawValue * (int64_t)outputPowerFactor();
+  if (scaled > INT32_MAX) return INT32_MAX;
+  if (scaled < INT32_MIN) return INT32_MIN;
+  return (int32_t)scaled;
+}
+
+inline uint32_t outputFactorForField(const char* field) {
+  if (!strncmp(field, "current_l", 9)) return settingCTFactor;
+  if (!strncmp(field, "voltage_l", 9)) return settingVTFactor;
+  if (!strncmp(field, "power_delivered", 15) || !strncmp(field, "power_returned", 14)) {
+    return outputPowerFactor();
+  }
+  if (!strncmp(field, "energy_delivered", 16) || !strncmp(field, "energy_returned", 15)) {
+    return outputPowerFactor();
+  }
+  if (!strcmp(field, "peak_pwr_last_q") || !strcmp(field, "highest_peak_pwr")) {
+    return outputPowerFactor();
+  }
+  return 1;
+}
+
 //MQTT
 uint32_t   settingMQTTinterval = 10;
 char      settingMQTTbroker[101], settingMQTTuser[75], settingMQTTpasswd[160], settingMQTTtopTopic[50] = _DEFAULT_MQTT_TOPIC;
@@ -557,7 +709,11 @@ bool      StaticInfoSend = false;
 bool      bSendMQTT = false;
 volatile bool mqttPublishActive = false;
 volatile bool mqttConnectActive = false;
+#ifdef POST_MEENT
+bool      bMQTTenabled = false;
+#else
 bool      bMQTTenabled = true;
+#endif
 bool      bMQTToverTLS = false;
 
 bool      hideMQTTsettings = false;
@@ -593,10 +749,18 @@ inline bool isShellyPro3EmMimicSelected() {
 #ifndef BASE_OTA_URL_SIZE
   #define BASE_OTA_URL_SIZE 96
 #endif
+#ifdef POST_MEENT
+char      BaseOTAurl[BASE_OTA_URL_SIZE] = "http://ota.smart-stuff.nl/p1u/v5/me/";
+#else
 char      BaseOTAurl[BASE_OTA_URL_SIZE] = OTAURL OTAURL_PREFIX;
+#endif
 char      UpdateVersion[25] = "";
 bool      bUpdateSketch = true;
+#ifdef POST_MEENT
+bool      bAutoUpdate = true;
+#else
 bool      bAutoUpdate = false;
+#endif
 
 //udp
 bool New_P1_UDP = false;
@@ -618,7 +782,21 @@ ApiResponse dashLiveApiResponse();
 ApiResponse historyMonthsApiResponse(const String& body);
 ApiResponse listFilesApiResponse();
 bool fillDashSolarJson(JsonDocument& doc);
+struct AccuPwrSystems {
+  bool      Available;
+  String    unit;
+  String    status;
+  float     currentPower;
+  uint8_t   chargeLevel;
+};
+
+AccuPwrSystems* dashboardAccu();
 bool fillDashAccuJson(JsonDocument& doc);
+void updateVictronAccu(int16_t powerW, uint16_t chargeLevel, uint16_t state);
+void invalidateVictronAccu();
+void setupVictronModbus();
+void handleVictronModbus();
+void victronModbusConfigChanged();
 void sendHWapiJson();
 void sendDeviceSettingsJson();
 void sendSmActualJson();
@@ -626,6 +804,7 @@ void sendSmFieldJson(const String& field);
 ApiResponse solarApiResponse();
 ApiResponse accuApiResponse();
 ApiResponse EIDGetClaimApiResponse(const String& action);
+String EIDStatusText();
 String modbusMonitorJson();
 void clearModbusMonitorEntries();
 void logTapMonitorEntry(const char* body, int16_t httpStatus);
@@ -634,7 +813,11 @@ void clearTapMonitorEntries();
 void setupApiWebSocket();
 void handleApiWebSocket();
 void apiWsMarkLiveDirty();
+void handleHttpServerClient();
+void serviceHttpServerRecovery();
 void handleRawPort();
+void SyncESPNOW();
+void SetNRGMPairingMode(bool enabled);
 
 #include "Debug.h"
 #include <ESPmDNS.h>

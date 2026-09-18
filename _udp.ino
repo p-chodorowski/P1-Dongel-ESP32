@@ -221,44 +221,48 @@ static void ebUpdateDynamic(EB_Payload& p, uint64_t epochSeconds) {
   
   // ---- power ----
   if (DSMRdata.power_delivered_l1_present || DSMRdata.power_returned_l1_present) {
-    int32_t del = DSMRdata.power_delivered_l1_present ? DSMRdata.power_delivered_l1.int_val() * 1000: 0;
-    int32_t ret = DSMRdata.power_returned_l1_present  ? DSMRdata.power_returned_l1.int_val() * 1000: 0;
+    int32_t del = DSMRdata.power_delivered_l1_present ? outputPowerInt((int64_t)DSMRdata.power_delivered_l1.int_val() * 1000): 0;
+    int32_t ret = DSMRdata.power_returned_l1_present  ? outputPowerInt((int64_t)DSMRdata.power_returned_l1.int_val() * 1000): 0;
     p.dy.pactive1 = del - ret;
   }
 
   if (DSMRdata.power_delivered_l2_present || DSMRdata.power_returned_l2_present) {
-    int32_t del = DSMRdata.power_delivered_l2_present ? DSMRdata.power_delivered_l2.int_val() * 1000: 0;
-    int32_t ret = DSMRdata.power_returned_l2_present  ? DSMRdata.power_returned_l2.int_val() * 1000: 0;
+    int32_t del = DSMRdata.power_delivered_l2_present ? outputPowerInt((int64_t)DSMRdata.power_delivered_l2.int_val() * 1000): 0;
+    int32_t ret = DSMRdata.power_returned_l2_present  ? outputPowerInt((int64_t)DSMRdata.power_returned_l2.int_val() * 1000): 0;
     p.dy.pactive2 = del - ret;
   }
 
   if (DSMRdata.power_delivered_l3_present || DSMRdata.power_returned_l3_present) {
-    int32_t del = DSMRdata.power_delivered_l3_present ? DSMRdata.power_delivered_l3.int_val() * 1000: 0;
-    int32_t ret = DSMRdata.power_returned_l3_present  ? DSMRdata.power_returned_l3.int_val() * 1000: 0;
+    int32_t del = DSMRdata.power_delivered_l3_present ? outputPowerInt((int64_t)DSMRdata.power_delivered_l3.int_val() * 1000): 0;
+    int32_t ret = DSMRdata.power_returned_l3_present  ? outputPowerInt((int64_t)DSMRdata.power_returned_l3.int_val() * 1000): 0;
     p.dy.pactive3 = del - ret;
   }
 
   if (DSMRdata.power_delivered_present || DSMRdata.power_returned_present) {
-    int32_t del = DSMRdata.power_delivered_present ? DSMRdata.power_delivered.int_val() * 1000 : 0;
-    int32_t ret = DSMRdata.power_returned_present  ? DSMRdata.power_returned.int_val() * 1000 : 0;
+    int32_t del = DSMRdata.power_delivered_present ? outputPowerInt((int64_t)DSMRdata.power_delivered.int_val() * 1000) : 0;
+    int32_t ret = DSMRdata.power_returned_present  ? outputPowerInt((int64_t)DSMRdata.power_returned.int_val() * 1000) : 0;
     p.dy.pactiveTot = del - ret;
   }
 
   // ---- Energy counters ----
-  if (DSMRdata.energy_delivered_tariff1_present) p.dy.energyPos  =  DSMRdata.energy_delivered_tariff1.int_val();
-  if (DSMRdata.energy_delivered_tariff2_present) p.dy.energyPos  += DSMRdata.energy_delivered_tariff2.int_val();
-  if (DSMRdata.energy_returned_tariff1_present)  p.dy.energyNeg  =  DSMRdata.energy_returned_tariff1.int_val();
-  if (DSMRdata.energy_returned_tariff2_present)  p.dy.energyNeg  += DSMRdata.energy_returned_tariff2.int_val();
+  uint64_t rawEnergyPos = 0;
+  uint64_t rawEnergyNeg = 0;
+  if (DSMRdata.energy_delivered_tariff1_present) rawEnergyPos += DSMRdata.energy_delivered_tariff1.int_val();
+  if (DSMRdata.energy_delivered_tariff2_present) rawEnergyPos += DSMRdata.energy_delivered_tariff2.int_val();
+  if (DSMRdata.energy_returned_tariff1_present)  rawEnergyNeg += DSMRdata.energy_returned_tariff1.int_val();
+  if (DSMRdata.energy_returned_tariff2_present)  rawEnergyNeg += DSMRdata.energy_returned_tariff2.int_val();
+  p.dy.energyPos = outputEnergyUint64(rawEnergyPos);
+  p.dy.energyNeg = outputEnergyUint64(rawEnergyNeg);
 
   // ---- voltage ----
-  if (DSMRdata.voltage_l1_present) p.dy.vrms1 = DSMRdata.voltage_l1.int_val();
-  if (DSMRdata.voltage_l2_present) p.dy.vrms2 = DSMRdata.voltage_l2.int_val();
-  if (DSMRdata.voltage_l3_present) p.dy.vrms3 = DSMRdata.voltage_l3.int_val();
+  if (DSMRdata.voltage_l1_present) p.dy.vrms1 = (int32_t)lroundf(outputVoltage((float)DSMRdata.voltage_l1.int_val()));
+  if (DSMRdata.voltage_l2_present) p.dy.vrms2 = (int32_t)lroundf(outputVoltage((float)DSMRdata.voltage_l2.int_val()));
+  if (DSMRdata.voltage_l3_present) p.dy.vrms3 = (int32_t)lroundf(outputVoltage((float)DSMRdata.voltage_l3.int_val()));
   
   // ---- current ----
-  if (DSMRdata.current_l1_present) p.dy.i1 = (p.dy.pactive1<0? -1 : 1) * (int32_t)DSMRdata.current_l1.int_val();
-  if (DSMRdata.current_l2_present) p.dy.i2 = (p.dy.pactive2<0? -1 : 1) * (int32_t)DSMRdata.current_l2.int_val();
-  if (DSMRdata.current_l3_present) p.dy.i3 = (p.dy.pactive3<0? -1 : 1) * (int32_t)DSMRdata.current_l3.int_val();
+  if (DSMRdata.current_l1_present) p.dy.i1 = (p.dy.pactive1<0? -1 : 1) * (int32_t)lroundf(outputCurrent((float)DSMRdata.current_l1.int_val()));
+  if (DSMRdata.current_l2_present) p.dy.i2 = (p.dy.pactive2<0? -1 : 1) * (int32_t)lroundf(outputCurrent((float)DSMRdata.current_l2.int_val()));
+  if (DSMRdata.current_l3_present) p.dy.i3 = (p.dy.pactive3<0? -1 : 1) * (int32_t)lroundf(outputCurrent((float)DSMRdata.current_l3.int_val()));
   p.dy.in = p.dy.i1 + p.dy.i2 + p.dy.i3;
 
   if (!ebSignRange(p.dy.ecdsa_md, &p.dy.seqno, (const uint8_t*)&p.dy.energyNeg + sizeof(p.dy.energyNeg))) {
@@ -290,6 +294,7 @@ static bool ebUdpSend(const EB_Payload& p) {
 EB_Payload g_payload;
 
 void UdpBegin() {
+  if ( skipNetwork ) return;
 
   g_udpCryptoReady = false;
   bool keyOk = ebLoadOrCreateKeypair();
@@ -349,6 +354,7 @@ void ebUdpSetStatc(){
 void handleUDP() {
   static bool udpCheckOnce = false;
 
+  if ( skipNetwork ) return;
   if (!New_P1_UDP || !bUDPenabled || !g_udpCryptoReady ) return;
 
   DebugTraceTln(F("UDP -- PUSH"));

@@ -17,6 +17,13 @@
   #define ENABLE_MIMICS 1
 #endif
 
+#ifndef ENABLE_CRASH_BREADCRUMBS
+  #define ENABLE_CRASH_BREADCRUMBS 0
+#endif
+#ifndef ENABLE_CRASH_COREDUMP_SUMMARY
+  #define ENABLE_CRASH_COREDUMP_SUMMARY ENABLE_CRASH_BREADCRUMBS
+#endif
+
 // Direct AP closed-network mode.
 // Optional local customer settings can be placed in ../../_secrets/direct_ap.h.
 #if __has_include("./../../_secrets/direct_ap.h")
@@ -49,6 +56,7 @@
 #define LED_BLUE  0x07
 #define LED_RED   0x070000
 #define LED_GREEN 0x0700
+#define LED_WHITE (LED_RED | LED_GREEN | LED_BLUE)
 #define LED_BLACK 0x0  
 uint32_t R_value = 0, B_value = 0, G_value = 0;
 
@@ -72,7 +80,8 @@ mod_conf module_config[] = {
  { 1, {{  4, 21,  5,  7,  6,  6, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1 }} }, /* NRGD     */
  { 2, {{ 42, 45, 41, 44, 43, 43, -1, -1 }, { 37, 40, 36, 39, 38, 38, -1, -1 }} }, /* ULTRA V2 */
  { 2, {{ 37, 40, 36, 39, 38, 38, -1, -1 }, { 42, 45, 41, 44, 43, 43, -1, -1 }} },  /* ULTRA X2 */
- { 1, {{ -1, -1, 10,  0,  1,  4, -1, -1 }, { 42, 45, 41, 44, 43, 43, -1, -1 }} }  /* D1MC */
+ { 1, {{ -1, -1, 10,  0,  1,  4, -1, -1 }, { 42, 45, 41, 44, 43, 43, -1, -1 }} }, /* D1MC */
+ { 1, {{ 20, 21,  5,  7,  6,  6, -1, -1 }, { -1, -1, -1, -1, -1, -1, -1, -1 }} }  /* W1MC */
 };
 
 struct dev_conf {
@@ -86,6 +95,7 @@ struct dev_conf {
     int8_t p1_in_rx;
     int8_t p1_in_dtr;
     int8_t han_io;
+    
     int8_t p1_out_tx;
     int8_t p1_out_dtr;
     int8_t p1_out_led;
@@ -98,12 +108,12 @@ struct dev_conf {
     int8_t eth_rst;
 };
 
-// enum HWtype { UNDETECTED, P1P, NRGD, P1E, P1EP, P1UM, P1U, NRGM, P1S, P1UX2, NRGDH, D1MC };
+// enum HWtype { UNDETECTED, P1P, NRGD, P1E, P1EP, P1UM, P1U, NRGM, P1S, P1UX2, NRGDH, D1MC, W1MC };
 
 dev_conf device_config[] = {
-  // -- GENERAL --  ----------- P1/HAN ------------  -------- ETH --------- 
+                   //  -- GENERAL --   --- IN ---   - P1 OUT -   -------- ETH --------- 
   { _DEFAULT_HOSTNAME,-1, -1, -1, -1,  -1, -1, -1,  -1, -1, -1,  -1, -1, -1, -1, -1, -1 }, // UNDETECTED
-  { "P1-Dongle-Pro",   9, -1,  7,  5,  10,  6, -1,  -1,  1,  0,  -1, -1, -1, -1, -1, -1 }, // P1P (ESP32C3 - P1 Dongle Pro)
+  { "P1-Dongle-Pro",   9, -1,  7,  5,  10,  6, -1,  -1, -1, -1,  -1, -1, -1, -1, -1, -1 }, // P1P (ESP32C3 - P1 Dongle Pro)
   { "NRG-Dongle-Pro",  9, -1,  3, -1,  20, -1, -1,  10,  1,  0,  -1, -1, -1, -1, -1, -1 }, // NRGD (ESP32C3 - NRG Dongle Pro)
   { "Eth-Dongle-Pro",  9,  8,  3, -1,   7,  0, -1,  -1, -1, -1,   1,  5,  6,  4, 10, -1 }, // P1E (ETH)
   { "Eth-Dongle-Pro",  9, -1,  8, -1,   0, -1, -1,   7,  3, -1,   6,  4,  5, 10,  1, -1 }, // P1EP (ETH)
@@ -114,6 +124,7 @@ dev_conf device_config[] = {
   { "Ultra-Dongle",    0,  9, -1, -1,  12, -1, -1,  21, 10, 11,  18, 15, 16, 14, 13, 17 }, // P1UX2 (Ultra X2 - aangepaste ETH pinout)
   { "nrg-gateway",     9,  8, -1, -1,  20, -1, 10,   4,  1, -1,  -1, -1, -1, -1, -1, -1 }, // NRGDH
   { "nrg-gateway",     9,  8, -1, -1,   7, -1,  5,  -1, -1, -1,  -1, -1, -1, -1, -1, -1 }, // D1MC
+  { "nrg-gateway",     9,  8, -1, -1,   1, -1,  0,   4, 10, -1,  -1, -1, -1, -1, -1, -1 }, // W1MC (ESP32C3 - Wifi dongle)
 };
 
 int8_t modType[2] = {-1,-1};

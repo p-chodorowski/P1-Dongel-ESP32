@@ -3,10 +3,20 @@ bool manifestBootCheckDone = false;
 bool manifestCheckPending = false;
 uint32_t manifestLastDailyCheckKey = 0;
 uint32_t manifestScheduleNextCheckMs = 0;
+static bool manifestPendingBootCheck = false;
+static uint32_t manifestPendingDailyCheckKey = 0;
+static volatile bool manifestMQTTConnectCheckRequested = false;
+static bool manifestSuccessfulCheckDone = false;
+static uint32_t manifestLastSuccessfulCheckMs = 0;
+static const uint32_t MANIFEST_RECENT_CHECK_MS = 5UL * 60UL * 1000UL;
+static const uint32_t MANIFEST_RETRY_INTERVAL_MS = 30UL * 60UL * 1000UL;
 static char remoteUpdateState[16] = "idle";
 static char remoteUpdateDetail[64] = "";
 static uint8_t remoteUpdateProgress = 0;
 static uint32_t remoteUpdateQueuedAt = 0;
+static uint32_t updateLedLastToggleMs = 0;
+static bool updateLedOn = false;
+static char latestFirmwareVersion[15] = _VERSION_ONLY;
 static const char* const ESPHOME_OTA_ROOT = "http://ota.smart-stuff.nl/esphome/";
 
 static void setRemoteUpdateStatus(const char* state, const char* detail = "") {
@@ -19,6 +29,10 @@ void AppendRemoteUpdateStatus(JsonDocument& doc) {
   ota["state"] = remoteUpdateState;
   ota["progress"] = remoteUpdateProgress;
   ota["detail"] = remoteUpdateDetail;
+}
+
+const char* LatestFirmwareVersion() {
+  return latestFirmwareVersion;
 }
 
 void handleRemoteUpdate(){
@@ -73,6 +87,7 @@ bool QueueRemoteUpdate(const char* versie, bool sketch) {
   remoteUpdateQueuedAt = millis();
   remoteUpdateProgress = 0;
   setRemoteUpdateStatus("queued", versie);
+  MQTTSetHAUpdateState(true, 10);
   return true;
 }
 
@@ -237,8 +252,10 @@ void ReadManifest() {
   Debugln(out);
 }
 
-bool CheckNewVersion() {
+bool CheckNewVersion(bool* checkSucceeded) {
   bool bNewVersionAvailable = false;
+
+  if (checkSucceeded) *checkSucceeded = false;
 
   JsonDocument manifest;
   if (!ReadManifest(manifest, nullptr)) return false;
@@ -248,11 +265,21 @@ bool CheckNewVersion() {
   int fix = manifest["fix"] | -1;
   if (maj < 0 || min < 0 || fix < 0) return false;
 
-  const char* manifestVersion = manifest["version"] | "";
+  const char* manifestVersionStr = manifest["version"] | "";
   int fork = manifest["fork"] | -1;
-  if (fork < 0) fork = ota_fork_from_version_string(manifestVersion);
+  if (fork < 0) fork = ota_fork_from_version_string(manifestVersionStr);
 
-  Debugf("Manifest version : %s\n\r", manifestVersion[0] ? manifestVersion : "(parts only)");
+  if (checkSucceeded) *checkSucceeded = true;
+
+  char manifestVersion[24] = "";
+  if (manifestVersionStr[0]) {
+    strlcpy(manifestVersion, manifestVersionStr, sizeof(manifestVersion));
+  } else {
+    snprintf(manifestVersion, sizeof(manifestVersion), "%d.%d.%d.%d", maj, min, fix, fork);
+  }
+  strlcpy(latestFirmwareVersion, manifestVersion, sizeof(latestFirmwareVersion));
+  MQTTSetHAUpdateState(false);
+  Debugf("Manifest version : %s\n\r", manifestVersion);
   Debugf("Current version: %d.%d.%d.%d\n\r", _VERSION_MAJOR, _VERSION_MINOR, _VERSION_PATCH, _VERSION_FORK);
 
   bNewVersionAvailable = ota_version_is_newer(
@@ -279,7 +306,25 @@ void ManifestCheckFromWorker() {
     return;
   }
 
-  if (!CheckNewVersion()) {
+  bool checkSucceeded = false;
+  const bool newVersionAvailable = CheckNewVersion(&checkSucceeded);
+  if (!checkSucceeded) {
+    // Do not consume the boot, MQTT-connect or daily trigger. A failed fetch
+    // is retried at a bounded interval instead of waiting until the next day.
+    manifestScheduleNextCheckMs = millis() + MANIFEST_RETRY_INTERVAL_MS;
+    manifestCheckPending = false;
+    return;
+  }
+
+  manifestSuccessfulCheckDone = true;
+  manifestLastSuccessfulCheckMs = millis();
+  if (manifestPendingBootCheck) manifestBootCheckDone = true;
+  if (manifestPendingDailyCheckKey) manifestLastDailyCheckKey = manifestPendingDailyCheckKey;
+  manifestMQTTConnectCheckRequested = false;
+  manifestPendingBootCheck = false;
+  manifestPendingDailyCheckKey = 0;
+
+  if (!newVersionAvailable) {
     manifestCheckPending = false;
     return;
   }
@@ -295,14 +340,33 @@ void ManifestCheckFromWorker() {
   manifestCheckPending = false;
 }
 
+void RequestManifestCheckOnMQTTConnect() {
+  manifestMQTTConnectCheckRequested = true;
+  manifestScheduleNextCheckMs = 0;
+}
+
 void handleManifestCheckSchedule(bool runBootCheckNow) {
   if (skipNetwork || netw_state == NW_NONE || UpdateRequested || manifestCheckPending) return;
+
+  // The remote manifest is only used for automatic installation and the
+  // MQTT update entity. Avoid the network request when both features are off.
+  if (!bAutoUpdate && !bMQTTenabled) return;
 
   const uint32_t nowMs = millis();
   if (!runBootCheckNow && nowMs < manifestScheduleNextCheckMs) return;
   manifestScheduleNextCheckMs = nowMs + (5UL * 60UL * 1000UL); // check planning every 5 minutes
 
-  const bool doBootCheck = (!manifestBootCheckDone);
+  const bool doBootCheck = bAutoUpdate && !manifestBootCheckDone;
+  bool doMQTTConnectCheck = bMQTTenabled && manifestMQTTConnectCheckRequested;
+
+  // A boot check may have completed immediately before MQTT connected. Its
+  // value is already current, so only republish it instead of fetching twice.
+  if (doMQTTConnectCheck && manifestSuccessfulCheckDone &&
+      (uint32_t)(nowMs - manifestLastSuccessfulCheckMs) < MANIFEST_RECENT_CHECK_MS) {
+    manifestMQTTConnectCheckRequested = false;
+    MQTTSetHAUpdateState(false);
+    doMQTTConnectCheck = false;
+  }
 
   bool doDailyCheck = false;
   uint32_t dayKey = 0;
@@ -314,26 +378,33 @@ void handleManifestCheckSchedule(bool runBootCheckNow) {
     }
   }
 
-  if (!doBootCheck && !doDailyCheck) return;
+  if (!doBootCheck && !doMQTTConnectCheck && !doDailyCheck) return;
 
   manifestCheckPending = true;
+  manifestPendingBootCheck = doBootCheck;
+  manifestPendingDailyCheckKey = doDailyCheck ? dayKey : 0;
   if (!WorkerEnqueueSimple(WORKER_JOB_MANIFEST_CHECK, WORKER_PRIO_NORMAL)) {
     manifestCheckPending = false;
+    manifestPendingBootCheck = false;
+    manifestPendingDailyCheckKey = 0;
     return;
   }
-
-  if (doBootCheck) manifestBootCheckDone = true;
-  if (doDailyCheck) manifestLastDailyCheckKey = dayKey;
 }
 
 void update_finished() {
   LogFile("OTA UPDATE succesfull", true);
+  if (UseRGB) OverrideLED(false, LED_BLACK);
   remoteUpdateProgress = 100;
   setRemoteUpdateStatus("done", "success");
 }
 
 void update_started() {
   LogFile("OTA UPDATE started", true);
+  if (UseRGB) {
+    updateLedLastToggleMs = millis();
+    updateLedOn = true;
+    OverrideLED(true, LED_WHITE);
+  }
   if (remoteUpdateProgress < 1) remoteUpdateProgress = 1;
   setRemoteUpdateStatus("running", UpdateVersion);
 }
@@ -345,12 +416,18 @@ void update_progress(int cur, int total) {
     remoteUpdateProgress = actualProgress > 90 ? 90 : actualProgress;
   }
   setRemoteUpdateStatus("running", UpdateVersion);
+  if (UseRGB && (uint32_t)(millis() - updateLedLastToggleMs) >= 250) {
+    updateLedLastToggleMs = millis();
+    updateLedOn = !updateLedOn;
+    OverrideLED(true, updateLedOn ? LED_WHITE : LED_BLACK);
+  }
   esp_task_wdt_reset();
 }
 
 void update_error(int err) {
   Debugf("HTTP update fatal error code %d | %s\n", err, httpUpdate.getLastErrorString().c_str());
   LogFile("OTA ERROR: no update",false);
+  if (UseRGB) OverrideLED(false, LED_BLACK);
   setRemoteUpdateStatus("error", httpUpdate.getLastErrorString().c_str());
 }
 
@@ -358,7 +435,7 @@ void update_error(int err) {
 void RemoteUpdate(const char* versie, bool sketch){
   (void)sketch;
   String ignored;
-  RemoteUpdateNow(versie, sketch, &ignored);
+  if (!RemoteUpdateNow(versie, sketch, &ignored)) MQTTSetHAUpdateState(false);
   UpdateRequested = false;
 } //RemoteUpdate
 

@@ -1,5 +1,6 @@
 struct SolarPwrSystems {
   bool      Available;
+  uint8_t   ApiVersion;
   String    Url;
   String    Token;
   uint64_t  TokenExpire;
@@ -16,15 +17,17 @@ extern float SolarEdgeFlowPvPower;
 extern bool  SolarEdgeFlowPvValid;
 extern AccuPwrSystems SolarEdgeAccu;
 
-SolarPwrSystems Enphase   = { false, "https://envoy/ivp/pdm/energy", "", 0, 0, 0, 0, 0,  60, 0, "/enphase.json"  };
-SolarPwrSystems SolarEdge = { false, "", "", 0, 0, 0, 0, 0, 300, 0, "/solaredge.json"  };
-SolarPwrSystems SMAinv    = { false, "http://192.168.1.231",      "", 0, 0, 0, 0, 0,  15, 0, "/sma.json" };
-SolarPwrSystems Omniksol  = { false, "", "", 0, 0, 0, 0, 0,  15, 0, "/omniksol.json"  };
+SolarPwrSystems Enphase   = { false, 1, "https://envoy/ivp/pdm/energy", "", 0, 0, 0, 0, 0,  60, 0, "/enphase.json"  };
+SolarPwrSystems SolarEdge = { false, 1, "", "", 0, 0, 0, 0, 0, 300, 0, "/solaredge.json"  };
+SolarPwrSystems SMAinv    = { false, 1, "http://192.168.1.231",      "", 0, 0, 0, 0, 0,  15, 0, "/sma.json" };
+SolarPwrSystems Omniksol  = { false, 1, "", "", 0, 0, 0, 0, 0,  15, 0, "/omniksol.json"  };
 static uint16_t LastSolarFetchDurationMs = 0;
 
 static String   _sma_sid;
 static uint32_t _sma_sid_t0 = 0;
 static const size_t SMA_MAX_RESPONSE_LEN = 2048;
+static const uint16_t SOLAR_HTTP_CONNECT_TIMEOUT_MS = 4000;
+static const uint16_t SOLAR_HTTP_TIMEOUT_MS = 5000;
 
 static void* solarSystemForSource(SolarSource src) {
   switch (src) {
@@ -44,6 +47,32 @@ static uint32_t defaultSolarRefreshInterval(SolarSource src) {
     case OMNIKSOL:   return 15;
   }
   return 15;
+}
+
+static const char* solarFetchTag(SolarSource src) {
+  switch (src) {
+    case ENPHASE:    return "solar-enphase";
+    case SOLAR_EDGE: return "solar-solaredge";
+    case SMA:        return "solar-sma";
+    case OMNIKSOL:   return "solar-omnik";
+  }
+  return "solar-fetch";
+}
+
+static bool solarHttpBegin(HTTPClient& http, WiFiClient& client, WiFiClientSecure& clientTLS, const String& url) {
+  bool beginOk;
+  if (url.startsWith("https://")) {
+    clientTLS.setInsecure();
+    beginOk = http.begin(clientTLS, url);
+  } else {
+    beginOk = http.begin(client, url);
+  }
+
+  if (!beginOk) return false;
+  http.setConnectTimeout(SOLAR_HTTP_CONNECT_TIMEOUT_MS);
+  http.setTimeout(SOLAR_HTTP_TIMEOUT_MS);
+  http.addHeader("Connection", "close");
+  return true;
 }
 
 static void noteSolarFetchDuration(uint32_t startMs) {
@@ -72,6 +101,78 @@ static void resetSolarEdgeRuntimeState() {
   SolarEdgeFlowPvValid = false;
 }
 
+// SolarEdge V2 authenticates requests with an API key in a header.  V1 uses the
+// same value as a query parameter, so keep the two paths deliberately separate.
+static bool solarEdgeV2FetchJson(const String& url, const String& apiKey, JsonDocument& doc) {
+  HTTPClient http;
+  WiFiClient client;
+  WiFiClientSecure clientTLS;
+  if (!solarHttpBegin(http, client, clientTLS, url)) return false;
+  http.addHeader("Accept", "application/json");
+  http.addHeader("X-API-Key", apiKey);
+  int rc = http.GET();
+  DebugVerboseT(F("SolarEdge V2 HTTP response: ")); DebugVerboseLn(rc);
+  if (rc != 200) {
+    String response = http.getString();
+    if (response.length()) { DebugTraceT(F("SolarEdge V2 response body: ")); DebugTraceLn(response); }
+    http.end();
+    return false;
+  }
+  String payload = http.getString();
+  http.end();
+  return !deserializeJson(doc, payload);
+}
+
+static bool solarEdgeV2LastValue(JsonVariant source, float& value) {
+  if (source.is<float>() || source.is<int>() || source.is<long>()) {
+    value = source.as<float>();
+    return true;
+  }
+  JsonArray values = source["values"].as<JsonArray>();
+  for (int i = (int)values.size() - 1; i >= 0; --i) {
+    if (!values[i]["value"].isNull()) {
+      value = values[i]["value"].as<float>();
+      return true;
+    }
+  }
+  return false;
+}
+
+static void getSolarEdgeV2Data() {
+  SolarPwrSystems* solarSystem = &SolarEdge;
+  const String baseUrl = "https://monitoringapi.solaredge.com/v2/sites/" + String(SolarEdge.SiteID);
+  const String apiKey = solarSystem->Token;
+  JsonDocument doc;
+  solarSystem->Actual = 0;
+  solarSystem->Daily = 0;
+  resetSolarEdgeRuntimeState();
+
+  // Overview is the V2 running production total for today (Wh).
+  if (solarEdgeV2FetchJson(baseUrl + "/overview", apiKey, doc)) {
+    JsonVariant total = doc["production"]["total"];
+    if (!total.isNull()) solarSystem->Daily = (uint32_t)total.as<float>();
+    doc.clear();
+  }
+
+  // /power/live is the documented live endpoint. Some currently deployed V2
+  // accounts expose the same data at /power, so use it as a compatibility fallback.
+  bool gotPower = solarEdgeV2FetchJson(baseUrl + "/power/live", apiKey, doc);
+  if (!gotPower) {
+    doc.clear();
+    gotPower = solarEdgeV2FetchJson(baseUrl + "/power", apiKey, doc);
+  }
+  if (!gotPower) return;
+
+  float power = 0.0f;
+  if (solarEdgeV2LastValue(doc["power"], power) ||
+      solarEdgeV2LastValue(doc["currentPower"], power) ||
+      solarEdgeV2LastValue(doc.as<JsonVariant>(), power)) {
+    solarSystem->Actual = (uint32_t)power;
+    SolarEdgeFlowPvPower = power;
+    SolarEdgeFlowPvValid = true;
+  }
+}
+
 static bool smaReadMetricValue(JsonObject dev, const char* key, long& out) {
   if (dev.isNull()) return false;
 
@@ -88,67 +189,94 @@ static bool smaReadMetricValue(JsonObject dev, const char* key, long& out) {
   return true;
 }
 
+static String smaJsonEscape(const String& value) {
+  String escaped;
+  escaped.reserve(value.length() + 4);
+  for (size_t i = 0; i < value.length(); i++) {
+    char c = value.charAt(i);
+    if (c == '"' || c == '\\') escaped += '\\';
+    escaped += c;
+  }
+  return escaped;
+}
+
+static bool smaReadHttpResponseCapped(HTTPClient& http, String& out) {
+  out = "";
+
+  int len = http.getSize();
+  if (len > 0 && len > (int)SMA_MAX_RESPONSE_LEN) return false;
+  if (!out.reserve(len > 0 ? len : SMA_MAX_RESPONSE_LEN)) return false;
+
+  WiFiClient* stream = http.getStreamPtr();
+  if (!stream) return false;
+
+  uint32_t lastDataMs = millis();
+  while (http.connected() || stream->available()) {
+    int available = stream->available();
+    if (available > 0) {
+      while (available-- > 0) {
+        int c = stream->read();
+        if (c < 0) break;
+        if (out.length() >= SMA_MAX_RESPONSE_LEN) {
+          out = "";
+          return false;
+        }
+        out += (char)c;
+      }
+      lastDataMs = millis();
+      WDT_FEED();
+      if (len > 0 && out.length() >= (size_t)len) break;
+      continue;
+    }
+
+    if ((uint32_t)(millis() - lastDataMs) > 5000) {
+      out = "";
+      return false;
+    }
+    delay(1);
+    WDT_FEED();
+  }
+
+  out.trim();
+  return out.length() > 0 && out.startsWith("{");
+}
+
 static bool smaHttpPOST(const String& url, const String& body, String& out) {
   out = "";
   HTTPClient http;
-  WiFiClientSecure *clientTLS = nullptr;
+  WiFiClient client;
+  WiFiClientSecure clientTLS;
 
   bool https = url.startsWith("https://");
   bool beginOk = false;
   if (https) {
-    clientTLS = new WiFiClientSecure();
-    clientTLS->setInsecure();
-    beginOk = http.begin(*clientTLS, url);
+    clientTLS.setInsecure();
+    beginOk = http.begin(clientTLS, url);
   } else {
-    beginOk = http.begin(url);
+    beginOk = http.begin(client, url);
   }
 
-  if (!beginOk) {
-    if (clientTLS) delete clientTLS;
-    return false;
-  }
+  if (!beginOk) return false;
 
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Connection", "close");
-  http.setTimeout(5000);
+  http.setConnectTimeout(SOLAR_HTTP_CONNECT_TIMEOUT_MS);
+  http.setTimeout(SOLAR_HTTP_TIMEOUT_MS);
   WDT_FEED();
   int rc = http.POST(body);
   WDT_FEED();
   if (rc == 200) {
-    int len = http.getSize();
-    if (len > 0 && len > (int)SMA_MAX_RESPONSE_LEN) {
-      http.end();
-      WDT_FEED();
-      if (clientTLS) delete clientTLS;
-      return false;
-    }
-    out = http.getString();
-    if (out.length() > SMA_MAX_RESPONSE_LEN) {
-      out = "";
-      http.end();
-      WDT_FEED();
-      if (clientTLS) delete clientTLS;
-      return false;
-    }
-    out.trim();
-    if (!out.startsWith("{")) {
-      out = "";
-      http.end();
-      WDT_FEED();
-      if (clientTLS) delete clientTLS;
-      return false;
-    }
+    if (!smaReadHttpResponseCapped(http, out)) out = "";
   }
   http.end();
   WDT_FEED();
-  if (clientTLS) delete clientTLS;
   return (rc == 200 && out.length() > 0);
 }
 
 static bool smaLogin(const String& baseUrl, const String& password, const char* right = "usr") {
   String resp;
   String url  = baseUrl + "/dyn/login.json";
-  String body = String("{\"pass\":\"") + password + "\",\"right\":\"" + right + "\"}";
+  String body = String("{\"pass\":\"") + smaJsonEscape(password) + "\",\"right\":\"" + right + "\"}";
   if (!smaHttpPOST(url, body, resp)) { _sma_sid = ""; DebugTln("Error smaHttpPOST"); return false; }
   JsonDocument doc;
   if (deserializeJson(doc, resp))     { _sma_sid = ""; DebugTln("Error sma deserializeJson error"); return false; }
@@ -166,15 +294,15 @@ static bool smaGetPacAndDay(const String& baseUrl, long& pac_W, long& day_Wh) {
   String url  = baseUrl + "/dyn/getValues.json?sid=" + _sma_sid;
   // SMA metric keys: 6100_40263F00 = current AC power, 6400_00262200 = daily yield.
   String body = "{\"destDev\":[],\"keys\":[\"6100_40263F00\",\"6400_00262200\"]}";
-  if (!smaHttpPOST(url, body, resp)) { DebugTln("Error smaHttpPOST values"); return false; }
+  if (!smaHttpPOST(url, body, resp)) { _sma_sid = ""; DebugTln("Error smaHttpPOST values"); return false; }
   JsonDocument doc;
-  if (deserializeJson(doc, resp)) return false;
+  if (deserializeJson(doc, resp)) { _sma_sid = ""; return false; }
 
   JsonObject result = doc["result"];
-  if (result.isNull()) return false;
-  auto it = result.begin(); if (it == result.end()) return false;
+  if (result.isNull()) { _sma_sid = ""; return false; }
+  auto it = result.begin(); if (it == result.end()) { _sma_sid = ""; return false; }
   JsonObject dev = it->value();
-  if (dev.isNull()) return false;
+  if (dev.isNull()) { _sma_sid = ""; return false; }
 
   long pac = 0;
   long day = 0;
@@ -199,6 +327,7 @@ void ReadSolarConfig(SolarSource src) {
   f.close();
 
   solarSystem->Available = true;
+  solarSystem->ApiVersion = doc["api-version"] | 1;  // Missing in existing files means legacy SolarEdge V1.
   solarSystem->Url   = doc["gateway-url"].as<String>();
   solarSystem->Token = doc["token"].as<String>();    // SMA uses this as the inverter password.
   solarSystem->Wp    = doc["wp"].as<uint32_t>();
@@ -214,6 +343,7 @@ void ReadSolarConfig(SolarSource src) {
   Debug("wp > "); Debugln(solarSystem->Wp);
   Debug("interval > "); Debugln(solarSystem->Interval);
   Debug("siteid > "); Debugln(solarSystem->SiteID);
+  Debug("api-version > "); Debugln(solarSystem->ApiVersion);
 #endif
 
   solarSystem->LastRefresh = 0;
@@ -241,6 +371,7 @@ void GetSolarData(SolarSource src, bool forceUpdate) {
 
   if (!solarSystem->Available) return;
   if (!forceUpdate && ((uptime() - solarSystem->LastRefresh) < solarSystem->Interval)) return;
+  CrashLogMark(solarFetchTag(src), __LINE__);
   solarSystem->LastRefresh = uptime();
   uint32_t fetchStartMs = millis();
 
@@ -259,6 +390,11 @@ void GetSolarData(SolarSource src, bool forceUpdate) {
   }
 
   if (src == SOLAR_EDGE) {
+    if (solarSystem->ApiVersion >= 2) {
+      getSolarEdgeV2Data();
+      noteSolarFetchDuration(fetchStartMs);
+      return;
+    }
     String baseUrl = "https://monitoringapi.solaredge.com/site/" + String(SolarEdge.SiteID);
     String token = solarSystem->Token;
     token.trim();
@@ -275,7 +411,6 @@ void GetSolarData(SolarSource src, bool forceUpdate) {
       powerFlowUrl += "?api_key=" + token;
     }
 
-    HTTPClient http;
     String payload;
     JsonDocument solarDoc;
     solarSystem->Actual = 0;
@@ -283,7 +418,10 @@ void GetSolarData(SolarSource src, bool forceUpdate) {
     resetSolarEdgeRuntimeState();
 
     auto fetchJson = [&](const String& url) -> bool {
-      http.begin(url.c_str());
+      HTTPClient http;
+      WiFiClient client;
+      WiFiClientSecure clientTLS;
+      if (!solarHttpBegin(http, client, clientTLS, url)) return false;
       http.addHeader("Accept", "application/json");
       int rc = http.GET();
       DebugVerboseLn(F("Solaredge request"));
@@ -360,9 +498,11 @@ void GetSolarData(SolarSource src, bool forceUpdate) {
   }
 
   HTTPClient http;
+  WiFiClient client;
+  WiFiClientSecure clientTLS;
   String urlcheck = solarSystem->Url;
   bool bSolis = (urlcheck.indexOf("CMD=inv_query") > 0);
-  http.begin(solarSystem->Url.c_str());
+  if (!solarHttpBegin(http, client, clientTLS, solarSystem->Url)) { noteSolarFetchDuration(fetchStartMs); return; }
   http.addHeader("Accept", "application/json");
   if (src == ENPHASE) {
     if (!bSolis) http.addHeader("Authorization", "Bearer " + solarSystem->Token);
@@ -424,6 +564,8 @@ void GetSolarDataNFromWorker() {
 }
 
 void GetSolarDataN() {
+  if (RngWritePending()) return;
+
   static uint32_t nextScheduleMs = 0;
   uint32_t now = millis();
   if ((int32_t)(now - nextScheduleMs) < 0) return;

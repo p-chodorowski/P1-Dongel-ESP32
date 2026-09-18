@@ -83,6 +83,7 @@ function otaVersionIsNewer(remote, local) {
 	  let eid_planner_enabled	= false
 	  let pairing_enabled    	= false
 	  let Meter_Source          = "DSMR"
+	  let MeterEnergyFactor    = 1
 	  let esphomeManifestRequested = false;
 	  let esphomeMigrationTarget = null;
   
@@ -335,12 +336,25 @@ cfgGaugeWATER.options.plugins.labels.render = renderLabelWater;
 function ShowHidePV(){
 	if ( document.getElementById('pv_enphase').checked ) {
 		document.getElementById('conf_token').style.display = "none";
+		document.getElementById('enphase_token').style.display = "block";
 		document.getElementById('gw_url').value = "https://envoy/api/v1/production";
 	}
 	if ( document.getElementById('pv_solaredge').checked ) {
 		document.getElementById('conf_token').style.display = "block";
+		document.getElementById('enphase_token').style.display = "none";
 		document.getElementById('gw_url').value = "";
 	}
+	UpdateSolarEdgeApiFields();
+}
+
+function UpdateSolarEdgeApiFields(){
+	const version = document.getElementById('solaredge_api_version')?.value || '1';
+	const isV2 = version === '2';
+	document.getElementById('solaredge_token_label').textContent = isV2 ? 'SolarEdge API V2 key or Client Secret:' : 'Legacy API key:';
+	document.getElementById('token').placeholder = isV2 ? 'Value issued by the SolarEdge Developer Platform' : 'eg L4QLVQ1LOKCQX2193VSEICXW61NP6B1O';
+	document.getElementById('solaredge_api_help').textContent = isV2
+		? 'V2 sends this value as an X-API-Key header. Do not share it with anyone.'
+		: 'Use an existing Monitoring API key. SolarEdge no longer issues new legacy keys.';
 }
   
 let latestInsightData = null;
@@ -484,12 +498,14 @@ function InsightData(data){
 }
 
 function SolarSendData() {
+	const isSolarEdge = document.getElementById('pv_solaredge').checked;
 
 	const jsonData = {
 		"gateway-url"     : document.getElementById('gw_url').value,
 		wp                : parseInt(document.getElementById('wp').value),
 		"refresh-interval": parseInt(document.getElementById('interval').value),
-		token             : document.getElementById('token').value,
+		token             : document.getElementById(isSolarEdge ? 'token' : 'token_enphase').value,
+		"api-version"    : isSolarEdge ? parseInt(document.getElementById('solaredge_api_version').value) : 1,
 		expire            : 0,
 		siteid            : parseInt(document.getElementById('siteid').value)
 	};
@@ -627,6 +643,16 @@ function meterValue(field, fallback = 0) {
 	return Number.isNaN(value) ? fallback : value;
 }
 
+function totalEnergyValue(json, totalKey, tariff1Key, tariff2Key, fallback = 0) {
+	const total = meterValue(dashMetric(json, totalKey), NaN);
+	if (!Number.isNaN(total)) return total;
+
+	const tariff1 = meterValue(dashMetric(json, tariff1Key), NaN);
+	const tariff2 = meterValue(dashMetric(json, tariff2Key), NaN);
+	if (Number.isNaN(tariff1) && Number.isNaN(tariff2)) return fallback;
+	return (Number.isNaN(tariff1) ? 0 : tariff1) + (Number.isNaN(tariff2) ? 0 : tariff2);
+}
+
 function meterString(field, fallback = "") {
 	const rawValue = (field && typeof field === "object" && Object.prototype.hasOwnProperty.call(field, "value"))
 		? field.value
@@ -708,6 +734,12 @@ function updateDashboardControls() {
 		button.classList.toggle("active", Act_Watt);
 		button.textContent = Act_Watt ? "Watt" : "kW";
 	});
+	const dashboardPowerUnit = document.getElementById("dsh-power");
+	if (dashboardPowerUnit) dashboardPowerUnit.textContent = powerUnit();
+	const accuPowerLabel = document.getElementById("dash-accu-power-label");
+	if (accuPowerLabel) {
+		accuPowerLabel.textContent = t("lbl-today-kw").replace(/\[[^\]]+\]/, `[${powerUnit()}]`);
+	}
 	const dashTab = document.getElementById("DashTab");
 	if (dashTab) dashTab.classList.toggle("dashboard-editing", dashboardEditMode);
 }
@@ -841,12 +873,8 @@ function SetOnSettings(json) {
 	HeeftWater = settingsWaterEnabled(objDAL?.getDeviceSettings?.()) || settingsWaterEnabled(json);
 
 	if (!Injection) {
-		Injection = meterValue(dashMetric(json, "energy_returned_tariff1"), NaN);
-		Injection = Number.isNaN(Injection) ? false : Injection;
-		if (!Injection) {
-			const returnedT2 = meterValue(dashMetric(json, "energy_returned_tariff2"), NaN);
-			Injection = Number.isNaN(returnedT2) ? false : returnedT2;
-		}
+		const returnedEnergy = totalEnergyValue(json, "energy_returned_total", "energy_returned_tariff1", "energy_returned_tariff2", NaN);
+		Injection = Number.isNaN(returnedEnergy) ? false : returnedEnergy;
 	}
 	Injection = Injection && !IgnoreInjection;
 
@@ -930,8 +958,9 @@ function UpdateAccu(){
 		trend_accu.data.datasets[0].data=[json.chargeLevel,100-json.chargeLevel];	
 		trend_accu.options.title.text = Number(json.chargeLevel).toLocaleString('nl-NL', {minimumFractionDigits: 0, maximumFractionDigits: 0} )+" %";
 		trend_accu.update();
-		document.getElementById('dash_accu_p').innerHTML = formatValue(json.currentPower);
-		document.getElementById('accu-status').innerHTML = json.status;
+		document.getElementById('dash_accu_p').innerHTML = formatPowerValue(json.currentPower);
+		const statusKey = `accu-status-${String(json.status || "idle").toLowerCase()}`;
+		document.getElementById('accu-status').innerHTML = t(statusKey);
 		setDashboardWidgetAvailable("dash_accu", true);
 	} else {
 		setDashboardWidgetAvailable("dash_accu", false);
@@ -1009,7 +1038,7 @@ function nrgm_getstatus(){
 
 function ProcessEIDClaim(json){
 	if ( "webhookUrl" in json ) {
-		document.getElementById('status').innerHTML = "<FONT COLOR='#70ac4d'>GEKOPPELD";
+		document.getElementById('status').innerHTML = "<FONT COLOR='#70ac4d'>" + t('eid-status-coupled');
 		document.getElementById('claim').style.display = 'none';
 	}	
 	if ( "claimUrl" in json ) {
@@ -1085,7 +1114,7 @@ function ProcessEIDPlanner(jsonData){
 }
 
 function getclaim(){
-	document.getElementById('status').innerHTML = "Status ophalen...";  	
+	document.getElementById('status').textContent = t('eid-status-loading');
 	objDAL.refreshEIDClaim();
 }
 
@@ -1099,6 +1128,9 @@ function parseVersionManifest(json)
 	  if ( otaVersionIsNewer(remote, firmwareVersion) )
 		document.getElementById('message').innerHTML = "Software versie " + json.version + " beschikbaar";
 	  else document.getElementById('message').innerHTML = "";
+	}
+	if (objDAL?.devinfo && Object.keys(objDAL.devinfo).length) {
+	  renderDeviceInformation(objDAL.devinfo, json);
 	}
 }
 
@@ -1171,8 +1203,8 @@ function refreshDashboard(json){
 		v3 = meterValue(dash("voltage_l3"), 0);
 
 
-		const voltageCardAvailable = !(HeeftWater && EnableHist);
-		if ( voltageCardAvailable && v1 ) {
+		// A separate water sensor and the smart-meter voltage can coexist.
+		if (v1) {
 			setDashboardWidgetAvailable("l2", true);
 			document.getElementById("fases").innerHTML = Phases;
 			
@@ -1272,8 +1304,8 @@ function refreshDashboard(json){
 		if (Dongle_Config != "p1-q") {
 
       //bereken verschillen afname, teruglevering en totaal
-      let nPA = meterValue(dash("energy_delivered_tariff1"), 0) + meterValue(dash("energy_delivered_tariff2"), 0);
-      let nPI = meterValue(dash("energy_returned_tariff1"), 0) + meterValue(dash("energy_returned_tariff2"), 0);
+      let nPA = totalEnergyValue(json, "energy_delivered_total", "energy_delivered_tariff1", "energy_delivered_tariff2", 0);
+      let nPI = totalEnergyValue(json, "energy_returned_total", "energy_returned_tariff1", "energy_returned_tariff2", 0);
       Parra = calculateDifferences( nPA, hist_arrPa, 1);
       Parri = calculateDifferences( nPI, hist_arrPi, 1);
       for(let i=0;i<3;i++){ Parr[i]=Parra[i] - Parri[i]; }
@@ -1327,7 +1359,8 @@ function refreshDashboard(json){
 		}
 	
 	if ( SolarActive ) UpdateSolar();
-	if ( AccuActive ) UpdateAccu();
+	// Always check: a Victron battery can become available after the dashboard loaded.
+	UpdateAccu();
 	applyAllDashboardWidgetStates();
 
 }
@@ -1756,138 +1789,399 @@ function SendNetSwitchJson() {
   
 
 //============================================================================  
-  function FSExplorer() {
-	 let main = document.querySelector('main');
-	 let fileSize = document.querySelector('fileSize');
+  let fmFileCount = 0;
+  let fmFreeBytes = 0;
+  let fmFileNames = new Set();
+  let fmFileSizes = new Map();
 
-	 Spinner(true);
-	 fetch('api/listfiles', {"setTimeout": 5000}).then(function (response) {
-		 return response.json();
-	 }).then(function (json) {
-	
-	//clear previous content	 
-	 let list = document.getElementById("FSmain");
-	 while (list.hasChildNodes()) {  
-	   list.removeChild(list.firstChild);
-	 }
-    
-	 nFilecount = json.length - 1; //last object is general information
-	 const fileUrls = json.slice(0, -1).map(file => `/${encodeURIComponent(file.name.replace(/^\/+/, ''))}`);
-     let dir = '<table id="FSTable" width=90%>';
-	   for (var i = 0; i < json.length - 1; i++) {
-		 dir += "<tr>";
-		 dir += `<td width=250px nowrap><a href ="${json[i].name}" target="_blank">${json[i].name}</a></td>`;
-		 dir += `<td width=100px nowrap><small>${json[i].size}</small></td>`;
-		 dir += `<td width=100px nowrap><a href ="${json[i].name}"download="${json[i].name}"> Download </a></td>`;
-		 dir += `<td width=100px nowrap><a href ="${json[i].name}?delete=/${json[i].name}"> Delete </a></td>`;
-		 dir += "</tr>";
-	   }	// for ..
-	   main.insertAdjacentHTML('beforeend', dir);
-	   document.querySelectorAll('[href*=delete]').forEach((node) => {
-			 node.addEventListener('click', () => {
-					 if (!confirm('Delete, sure ?!')) event.preventDefault();  
-			 });
-	   });
-	   main.insertAdjacentHTML('beforeend', '</table>');
-       main.insertAdjacentHTML('beforeend',
-         `<div id="filecount">
-            <span>${t('lbl-fm-files')}: ${nFilecount}</span>
-            <a id="downloadAllFiles" href="#">Download all</a>
-          </div>`);
-       document.getElementById('downloadAllFiles').addEventListener('click', async event => {
-         event.preventDefault();
-         await downloadFilesSequential(fileUrls);
-       });
-	   main.insertAdjacentHTML('beforeend', `<p id="FSFree">${t('lbl-fm-storage')}: <b>${json[i].usedBytes} ${t('lbl-fm-used')}</b> | ${json[i].totalBytes} ${t('lbl-fm-total')}`);
-	   free = json[i].freeBytes;
-	   fileSize.innerHTML = "<b> &nbsp; </b><p>";    // spacer                
-	   Spinner(false);
-	 });	// function(json)
-	 
-    //view selected filesize
-	  document.getElementById('Ifile').addEventListener('change', () => {
-      //format filesize
-		  let nBytes = document.getElementById('Ifile').files[0].size;
-      let output = `${nBytes} Byte`;
-		  for (let aMultiples = [
-			 ' KB',
-			 ' MB'
-			], i = 0, nApprox = nBytes / 1024; nApprox > 1; nApprox /= 1024, i++) {
-			  output = nApprox.toFixed(2) + aMultiples[i];
-			}
-
-      let fUpload = true;
-      //check freespace
-			if (nBytes > free) {
-			  fileSize.innerHTML = `<p><small> File size: ${output}</small><strong style="color: red;"> not enough space! </strong><p>`;
-        fUpload = false;
-			}
-      //check filecount
-      //TODO: 
-      //  Although uploading a new file is blocked, REPLACING a file when the count is 30 must still be possible.
-      //  check if filename is already on the list, if so, allow this upload.
-			if ( nFilecount >= MAX_FILECOUNT) {
-			  fileSize.innerHTML = `<p><small> file size: ${output}</small><strong style="color: red;"> Max number of files (${MAX_FILECOUNT}) reached! </strong><p>`;
-        fUpload = false;
-			}
-      if( fUpload ){
-        fileSize.innerHTML = `<b>File size:</b> ${output}<p>`;
-			  document.getElementById('Iupload').removeAttribute('disabled');
-      }
-			else {			  
-        document.getElementById('Iupload').setAttribute('disabled', 'disabled');
-			}
-	 });	
+  function formattedSizeToBytes(value) {
+    const match = String(value || "").trim().match(/^([\d.,]+)\s*(B|KB|MB|GB|Byte)?$/i);
+    if (!match) return 0;
+    const amount = Number(match[1].replace(',', '.'));
+    const powers = { B: 0, BYTE: 0, KB: 1, MB: 2, GB: 3 };
+    return amount * Math.pow(1024, powers[(match[2] || 'B').toUpperCase()] || 0);
   }
 
+  function formatUploadSize(bytes) {
+    if (bytes < 1024) return `${bytes} Byte`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function createFileAction(icon, label, href, extraClass = '') {
+    const action = document.createElement('a');
+    action.className = `fm-file-action ${extraClass}`.trim();
+    action.href = href;
+    action.title = label;
+    action.setAttribute('aria-label', label);
+    action.innerHTML = `<span class="iconify" data-icon="${icon}"></span>`;
+    return action;
+  }
+
+  function updateFileUploadState() {
+    const input = document.getElementById('Ifile');
+    const submit = document.getElementById('Iupload');
+    const status = document.getElementById('fmFileSize');
+    const file = input.files[0];
+
+    status.classList.remove('is-error');
+    submit.disabled = true;
+    if (!file) {
+      status.textContent = '';
+      return;
+    }
+
+    const size = formatUploadSize(file.size);
+    const normalizedName = file.name.replace(/^\/+/, '');
+    const replacesExistingFile = fmFileNames.has(normalizedName);
+    const availableBytes = fmFreeBytes + (fmFileSizes.get(normalizedName) || 0);
+    let error = '';
+
+    if (file.size > availableBytes) error = t('err-fm-no-space');
+    if (fmFileCount >= MAX_FILECOUNT && !replacesExistingFile) error = t('err-fm-max-files').replace('{count}', MAX_FILECOUNT);
+
+    if (error) {
+      status.classList.add('is-error');
+      status.textContent = `${t('lbl-fm-file-size')}: ${size} · ${error}`;
+      return;
+    }
+
+    status.textContent = `${t('lbl-fm-file-size')}: ${size}`;
+    submit.disabled = false;
+  }
+
+  function renderFileManager(files, stats) {
+    const main = document.getElementById('FSmain');
+    const fileUrls = files.map(file => `/${encodeURIComponent(file.name.replace(/^\/+/, ''))}`);
+    main.replaceChildren();
+
+    fmFileCount = files.length;
+    fmFreeBytes = formattedSizeToBytes(stats.freeBytes);
+    fmFileNames = new Set(files.map(file => file.name.replace(/^\/+/, '')));
+    fmFileSizes = new Map(files.map(file => [file.name.replace(/^\/+/, ''), formattedSizeToBytes(file.size)]));
+
+    document.getElementById('fmFileCount').textContent = `${fmFileCount} / ${MAX_FILECOUNT}`;
+    document.getElementById('fmStorageValue').textContent = `${stats.usedBytes} ${t('lbl-fm-used')}`;
+    document.getElementById('fmStorageMeta').textContent = `${stats.freeBytes} ${t('lbl-fm-free')} · ${stats.totalBytes} ${t('lbl-fm-total')}`;
+
+    const usedBytes = formattedSizeToBytes(stats.usedBytes);
+    const totalBytes = formattedSizeToBytes(stats.totalBytes);
+    const usedPercent = totalBytes ? Math.min(100, Math.max(0, (usedBytes / totalBytes) * 100)) : 0;
+    document.getElementById('fmStorageBar').style.width = `${usedPercent.toFixed(1)}%`;
+
+    if (!files.length) {
+      const empty = document.createElement('p');
+      empty.className = 'fm-empty';
+      empty.textContent = t('txt-fm-empty');
+      main.appendChild(empty);
+    } else {
+      const fileList = document.createElement('div');
+      fileList.className = 'fm-file-list';
+
+      files.forEach(file => {
+        const fileUrl = `/${encodeURIComponent(file.name.replace(/^\/+/, ''))}`;
+        const row = document.createElement('div');
+        row.className = 'fm-file-row';
+
+        const name = document.createElement('a');
+        name.className = 'fm-file-name';
+        name.href = fileUrl;
+        name.target = '_blank';
+        name.rel = 'noopener';
+        name.textContent = file.name;
+
+        const size = document.createElement('span');
+        size.className = 'fm-file-size';
+        size.textContent = file.size;
+
+        const actions = document.createElement('div');
+        actions.className = 'fm-file-actions';
+        const openAction = createFileAction('mdi-open-in-new', t('btn-fm-open'), fileUrl);
+        openAction.target = '_blank';
+        openAction.rel = 'noopener';
+        const downloadAction = createFileAction('mdi-download', t('btn-fm-download'), fileUrl);
+        downloadAction.download = file.name.replace(/^\/+/, '');
+        const deleteAction = createFileAction('mdi-delete-outline', t('btn-fm-delete'), `${fileUrl}?delete=/${encodeURIComponent(file.name.replace(/^\/+/, ''))}`, 'fm-file-delete');
+        deleteAction.addEventListener('click', event => {
+          if (!confirm(t('txt-fm-delete-confirm').replace('{name}', file.name))) event.preventDefault();
+        });
+        actions.append(openAction, downloadAction, deleteAction);
+        row.append(name, size, actions);
+        fileList.appendChild(row);
+      });
+      main.appendChild(fileList);
+    }
+
+    const downloadAll = document.getElementById('downloadAllFiles');
+    downloadAll.hidden = !files.length;
+    downloadAll.onclick = async event => {
+      event.preventDefault();
+      await downloadFilesSequential(fileUrls);
+    };
+
+    updateFileUploadState();
+  }
+
+  function FSExplorer() {
+    const main = document.getElementById('FSmain');
+    document.getElementById('Ifile').onchange = updateFileUploadState;
+
+    Spinner(true);
+    fetch('api/listfiles')
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(json => {
+        const stats = json[json.length - 1] || {};
+        renderFileManager(json.slice(0, -1), stats);
+      })
+      .catch(error => {
+        console.error('Unable to load file list:', error);
+        main.innerHTML = `<p class="fm-error">${t('err-fm-load')}</p>`;
+      })
+      .finally(() => Spinner(false));
+  }
+
+function deviceInfoValue(item) {
+  if (item && typeof item === "object") {
+    return `${item.value}${item.unit ? ` ${item.unit}` : ""}`;
+  }
+  return item ?? "-";
+}
+
+function addDeviceInfoRow(container, label, value, valueClass = "") {
+  if (!container || value === undefined || value === null || (value === "" && !valueClass)) return;
+  const row = document.createElement("div");
+  row.className = "sysinfo-row";
+  const labelNode = document.createElement("span");
+  labelNode.className = "sysinfo-label";
+  labelNode.textContent = label;
+  const valueNode = document.createElement("span");
+  valueNode.className = `sysinfo-value ${valueClass}`.trim();
+  valueNode.textContent = deviceInfoValue(value);
+  row.append(labelNode, valueNode);
+  container.appendChild(row);
+  return valueNode;
+}
+
+function addDeviceInfoPartsRow(container, label, parts) {
+  const usableParts = parts.filter(part => part !== undefined && part !== null && part !== "");
+  if (!container || !usableParts.length) return;
+  const valueNode = addDeviceInfoRow(container, label, "", "sysinfo-value-parts");
+  if (!valueNode) return;
+  usableParts.forEach(part => {
+    const partNode = document.createElement("span");
+    partNode.className = "sysinfo-value-part";
+    partNode.textContent = part;
+    valueNode.appendChild(partNode);
+  });
+}
+
+function addDeviceInfoSummary(container, label, value, meta = "") {
+  if (!container || value === undefined || value === null || value === "") return;
+  const card = document.createElement("div");
+  card.className = "sysinfo-summary";
+  const labelNode = document.createElement("span");
+  labelNode.className = "sysinfo-summary-label";
+  labelNode.textContent = label;
+  const valueNode = document.createElement("span");
+  valueNode.className = "sysinfo-summary-value";
+  valueNode.textContent = deviceInfoValue(value);
+  card.append(labelNode, valueNode);
+  if (meta) {
+    const metaNode = document.createElement("span");
+    metaNode.className = "sysinfo-summary-meta";
+    metaNode.textContent = meta;
+    card.appendChild(metaNode);
+  }
+  container.appendChild(card);
+}
+
+function deviceVersionNumber(version) {
+  const match = String(version || "").match(/v?(\d+)\.(\d+)\.(\d+)/i);
+  return match ? Number(match[1]) * 10000 + Number(match[2]) * 100 + Number(match[3]) : 0;
+}
+
+function deviceInfoNumber(value) {
+  const number = Number(value ?? 0);
+  const numberLocale = locale === "se" ? "sv-SE" : locale;
+  return Number.isFinite(number) ? number.toLocaleString(numberLocale) : String(value ?? 0);
+}
+
+function p1ProtocolLabel(obj) {
+  if (obj.meter_source === "HAN") return "HAN";
+  const mode = String(obj.p1_communication_mode || "");
+  if (mode.includes("9600")) return "DSMR 2/3";
+  if (mode.includes("115200")) return "DSMR 4/5";
+  return obj.meter_source || "P1";
+}
+
+function conciseP1Diagnostics(value) {
+  const raw = String(value || "");
+  const crcMode = raw.match(/CRC\s+(detecteren|actief|niet aanwezig)/i)?.[1]?.toLowerCase();
+  const skippedFields = raw.match(/velden overgeslagen\s+(\d+)/i)?.[1];
+  if (!crcMode && skippedFields === undefined) return raw.replace(/\s*·\s*fouten\s+\d+/i, "");
+
+  const crcKey = crcMode === "actief"
+    ? "sysinfo-crc-active"
+    : crcMode === "niet aanwezig"
+      ? "sysinfo-crc-absent"
+      : "sysinfo-crc-detecting";
+  const parts = crcMode ? [t(crcKey)] : [];
+  if (skippedFields !== undefined) parts.push(`${t("sysinfo-fields-skipped")} ${skippedFields}`);
+  return parts.join(" · ");
+}
+
+function mqttStatusLabel(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "yes": return t("sysinfo-connected");
+    case "no": return t("sysinfo-disconnected");
+    case "off": return t("sysinfo-disabled");
+    default: return status || "-";
+  }
+}
+
+function addFirmwareUpdateAction(valueNode, channel) {
+  if (!valueNode) return;
+  const link = document.createElement("a");
+  link.className = "sysinfo-update-action";
+  link.href = "#";
+  link.textContent = t("sysinfo-update-action");
+  link.onclick = () => { startUpdateFlow(channel); return false; };
+  valueNode.appendChild(link);
+}
+
+function renderDeviceInformation(obj, manifest) {
+  const containers = {
+    overview: document.getElementById("sysinfo_overview"),
+    update: document.getElementById("sysinfo_update_rows"),
+    smartMeter: document.getElementById("sysinfo_smart_meter"),
+    network: document.getElementById("sysinfo_network"),
+    hardware: document.getElementById("sysinfo_hardware"),
+    status: document.getElementById("sysinfo_status"),
+    connections: document.getElementById("sysinfo_connections"),
+    technical: document.getElementById("sysinfo_technical_rows")
+  };
+  Object.values(containers).forEach(container => { if (container) container.innerHTML = ""; });
+
+  const shortFirmware = String(obj.fwversion || "-").split(" ( ")[0];
+  const telegramCount = Number(obj.telegramcount || 0);
+  const telegramErrors = Number(obj.telegramerrors || 0);
+  const meterDetected = telegramCount > 0;
+  const meterStatus = meterDetected ? t("sysinfo-detected") : t("sysinfo-not-detected");
+  const meterMeta = meterDetected
+    ? `${p1ProtocolLabel(obj)} · ${deviceInfoNumber(telegramCount)} ${t("sysinfo-read")}`
+    : p1ProtocolLabel(obj);
+  const networkMeta = [obj.ssid, obj.ipaddress].filter(Boolean).join(" · ");
+  const installedVersion = deviceVersionNumber(obj.fwversion);
+  const latestVersion = deviceVersionNumber(manifest.version);
+  const firmwareStatus = !latestVersion
+    ? t("sysinfo-checking-update")
+    : latestVersion > installedVersion ? t("sysinfo-update-available") : t("sysinfo-current");
+  addDeviceInfoSummary(containers.overview, t("setting-smart-meter"), meterStatus, meterMeta);
+  addDeviceInfoSummary(containers.overview, t("sysinfo-network"), obj.network, networkMeta);
+  addDeviceInfoSummary(containers.overview, t("sysinfo-firmware"), shortFirmware, firmwareStatus);
+  addDeviceInfoSummary(containers.overview, t("sysinfo-hardware"), obj.hardware);
+  addDeviceInfoSummary(containers.overview, td("uptime"), obj.uptime);
+
+  addDeviceInfoRow(containers.update, td("fwversion"), obj.fwversion);
+  if (manifest.version) {
+    const stableValue = addDeviceInfoRow(containers.update, t("lbl-latest-fwversion"), manifest.version);
+    addFirmwareUpdateAction(stableValue, "stable");
+  }
+  if (manifest.beta) {
+    const betaValue = addDeviceInfoRow(containers.update, t("lbl-beta-fwversion"), manifest.beta);
+    addFirmwareUpdateAction(betaValue, "beta");
+  }
+  const updateCard = document.getElementById("sysinfo_update");
+  updateCard?.classList.toggle("has-update", latestVersion > installedVersion);
+  updateCard?.classList.toggle("is-current", latestVersion > 0 && latestVersion <= installedVersion);
+
+  ["meter_source", "p1_communication_mode"].forEach(key =>
+    addDeviceInfoRow(containers.smartMeter, td(key), obj[key]));
+  addDeviceInfoPartsRow(containers.smartMeter, td("p1_diagnostics"), conciseP1Diagnostics(obj.p1_diagnostics).split("·").map(part => part.trim()));
+  if (obj.telegramcount !== undefined || obj.telegramerrors !== undefined) {
+    addDeviceInfoRow(
+      containers.smartMeter,
+      t("sysinfo-telegrams-breakdown"),
+      `${deviceInfoNumber(telegramCount)} / ${deviceInfoNumber(telegramErrors)}`,
+      "sysinfo-value-part"
+    );
+  }
+
+  const connection = [obj.network, obj.ssid, obj.wifirssi !== undefined ? `${obj.wifirssi} dBm` : ""].filter(Boolean).join(" · ");
+  addDeviceInfoRow(containers.network, td("network"), connection);
+  ["hostname", "ipaddress", "macaddress"].forEach(key => addDeviceInfoRow(containers.network, td(key), obj[key]));
+
+  ["hardware", "chipid", "cpufreq", "freeheap"].forEach(key => addDeviceInfoRow(containers.hardware, td(key), obj[key]));
+  const flashSizeKb = obj.flashchipsize?.value !== undefined ? Number(obj.flashchipsize.value) * 1024 : undefined;
+  const storageValues = [flashSizeKb, obj.sketchsize?.value, obj.FSsize?.value];
+  if (storageValues.every(value => value !== undefined)) {
+    addDeviceInfoRow(
+      containers.hardware,
+      t("sysinfo-storage-breakdown"),
+      `${storageValues.join(" / ")} kB`,
+      "sysinfo-value-part"
+    );
+  }
+
+  ["uptime", "reboots", "lastreset"].forEach(key => addDeviceInfoRow(containers.status, td(key), obj[key]));
+
+  if (obj.mqttbroker !== undefined || obj.mqttbroker_connected !== undefined) {
+    const mqtt = [
+      obj.mqttbroker,
+      mqttStatusLabel(obj.mqttbroker_connected),
+      obj.mqttinterval !== undefined ? `${obj.mqttinterval} s` : ""
+    ].filter(Boolean).join(" | ");
+    addDeviceInfoRow(containers.connections, t("sysinfo-mqtt-breakdown"), mqtt, "sysinfo-value-part");
+  }
+  if (obj.meent_webid_status !== undefined || obj.meent_api_key_status !== undefined || obj.meent_data_status !== undefined) {
+    const meentLastSuccess = Number(obj.meent_last_success || 0);
+    // DSMR timestamps are local meter time. The firmware's epoch representation
+    // deliberately has no timezone offset, so render it as UTC to prevent the
+    // browser from applying the local offset a second time.
+    const meentLastSuccessText = meentLastSuccess
+      ? new Date(meentLastSuccess * 1000).toLocaleString(undefined, { timeZone: "UTC" })
+      : "";
+    const meentData = obj.meent_data_status === undefined ? "" :
+      `${obj.meent_data_status}${meentLastSuccessText ? ` (${meentLastSuccessText})` : ""}`;
+    const meent = [
+      obj.meent_webid_status !== undefined ? `WebID: ${obj.meent_webid_status}` : "",
+      obj.meent_api_key_status !== undefined ? `API-key: ${obj.meent_api_key_status}` : "",
+      meentData ? `Data: ${meentData}` : ""
+    ].filter(Boolean).join(" | ");
+    // Kept literal: language files are fetched from the CDN and older cached
+    // files do not know this recently added key.
+    addDeviceInfoRow(containers.connections, "MEENT", meent, "sysinfo-value-part");
+  }
+  ["eid_status", "paired"].forEach(key => addDeviceInfoRow(containers.connections, td(key), obj[key]));
+  document.getElementById("sysinfo_connections_card")?.toggleAttribute("hidden", !containers.connections?.children.length);
+
+  const groupedKeys = new Set([
+    "fwversion", "hardware", "meter_source", "p1_communication_mode", "smart_meter_version", "p1_diagnostics",
+    "telegramcount", "telegramerrors", "network", "ssid", "wifirssi", "hostname", "ipaddress", "macaddress",
+    "chipid", "cpufreq", "freeheap", "flashchipsize", "sketchsize", "freesketchspace", "FSsize", "uptime",
+    "reboots", "lastreset", "mqttbroker", "mqttbroker_connected", "mqttinterval", "meent_webid_status", "meent_api_key_status", "meent_data_status", "meent_last_success", "eid_status", "paired"
+  ]);
+  ["coreversion", "sdkversion", "compileoptions", "indexfile"].forEach(key =>
+    addDeviceInfoRow(containers.technical, td(key), obj[key]));
+  Object.keys(obj).filter(key => !groupedKeys.has(key) && !["coreversion", "sdkversion", "compileoptions", "indexfile"].includes(key))
+    .forEach(key => addDeviceInfoRow(containers.technical, td(key), obj[key]));
+}
+
 function parseDeviceInfo(obj) {
-  const tableRef = document.getElementById('tb_info');
-  tableRef.innerHTML = ""; // clear table
   console.log("dev info compileoptions:", obj.compileoptions);
 
   // NETSW config
-  const showNetSw = obj.compileoptions.includes("[NETSW]");
+  const showNetSw = String(obj.compileoptions || "").includes("[NETSW]");
   document.getElementById("bNETSW").style.display = showNetSw ? "block" : "none";
   updateSystemActionMenu(obj);
-    
-  // add version info 
+
   const manifest = objDAL.version_manifest;
-  if (manifest.version) {
-    const row = tableRef.insertRow(-1);
-    row.insertCell(0).innerHTML = t("lbl-latest-fwversion");
-    row.insertCell(1).innerHTML = manifest.version;
-    row.insertCell(2).innerHTML = `<a style='color:red' onclick='startUpdateFlow("stable")' href='#'>${t('lbl-install')}</a>`;
-    console.log("last version:", manifest.version);
-  }
-  
-    if (manifest.beta) {
-    const row = tableRef.insertRow(-1);
-    row.insertCell(0).innerHTML = t("lbl-beta-fwversion");
-    row.insertCell(1).innerHTML = manifest.beta;
-    row.insertCell(2).innerHTML = `<a style='color:red' onclick='startUpdateFlow("beta")' href='#'>${t('lbl-install')}</a>`;
-  }
-
-  // add dev info
-  for (let k in obj) {
-    if (k === "meter_source") Meter_Source = obj[k];
-
-    const row = tableRef.insertRow(-1);
-    row.insertCell(0).innerHTML = td(k);
-
-    if (typeof obj[k] === "object") {
-      row.insertCell(1).innerHTML = obj[k].value;
-      row.insertCell(2).innerHTML = obj[k].unit;
-      row.cells[1].style.textAlign = "right";
-    } else {
-      row.insertCell(1).innerHTML = obj[k];
-      row.insertCell(2);
-    }
-
-    if (k === "fwversion") {
-      devVersion = obj[k];
-      console.log("fwversion:", devVersion);
-    }
-  }
+  Meter_Source = obj.meter_source || Meter_Source;
+  devVersion = obj.fwversion || "-";
+  renderDeviceInformation(obj, manifest);
 
   // firmware parsing
   document.getElementById('devVersion').innerHTML = devVersion;
@@ -2529,10 +2823,10 @@ function formatFailureLog(svalue) {
 		data.data[i].MM   = parseInt(data.data[i].date.substring(2,4));
         
         //simple differences
-        data.data[i].p_edt1= (data.data[i].values[0] - data.data[slotbefore].values[0]);
-        data.data[i].p_edt2= (data.data[i].values[1] - data.data[slotbefore].values[1]);
-        data.data[i].p_ert1= (data.data[i].values[2] - data.data[slotbefore].values[2]);
-        data.data[i].p_ert2= (data.data[i].values[3] - data.data[slotbefore].values[3]);
+        data.data[i].p_edt1= (data.data[i].values[0] - data.data[slotbefore].values[0]) * MeterEnergyFactor;
+        data.data[i].p_edt2= (data.data[i].values[1] - data.data[slotbefore].values[1]) * MeterEnergyFactor;
+        data.data[i].p_ert1= (data.data[i].values[2] - data.data[slotbefore].values[2]) * MeterEnergyFactor;
+        data.data[i].p_ert2= (data.data[i].values[3] - data.data[slotbefore].values[3]) * MeterEnergyFactor;
 		data.data[i].p_gd  = (data.data[i].values[4] - data.data[slotbefore].values[4]);
         data.data[i].water = (data.data[i].values[5] - data.data[slotbefore].values[5]);
         data.data[i].solar = (data.data[i].values.length > 6) ? Number(data.data[i].values[6]) : -1;
@@ -2563,10 +2857,10 @@ function formatFailureLog(svalue) {
       else
       {
         costs = 0;
-        data.data[i].p_edt1    = data.data[i].values[0];
-        data.data[i].p_edt2    = data.data[i].values[1];
-        data.data[i].p_ert1    = data.data[i].values[2];        
-        data.data[i].p_ert2    = data.data[i].values[3];        
+        data.data[i].p_edt1    = data.data[i].values[0] * MeterEnergyFactor;
+        data.data[i].p_edt2    = data.data[i].values[1] * MeterEnergyFactor;
+        data.data[i].p_ert1    = data.data[i].values[2] * MeterEnergyFactor;
+        data.data[i].p_ert2    = data.data[i].values[3] * MeterEnergyFactor;
         data.data[i].p_gd      = data.data[i].values[4];
 		data.data[i].water     = data.data[i].values[5];
         data.data[i].solar     = (data.data[i].values.length > 6) ? Number(data.data[i].values[6]) : -1;
@@ -2631,8 +2925,8 @@ function refreshHistData(type) {
 				let values = data.data[tempslot].values;
 				hist_arrG[i] = values[4];
 				hist_arrW[i] = values[5];
-				hist_arrPa[i] = values[0] + values[1];
-				hist_arrPi[i] = values[2] + values[3];
+				hist_arrPa[i] = (values[0] + values[1]) * MeterEnergyFactor;
+				hist_arrPi[i] = (values[2] + values[3]) * MeterEnergyFactor;
 				}
 				DailyHistoryReady = true;
 				if (activeTab === "bDashTab" && objDAL.getDashLive()?.timestamp) {
@@ -3091,6 +3385,11 @@ function formatValue(value)
         "er_tariff1" in json ? er_tariff1 = json.er_tariff1.value : er_tariff1 = 0;
         "er_tariff2" in json ? er_tariff2 = json.er_tariff2.value : er_tariff2 = 0;
         "gd_tariff" in json ? gd_tariff = json.gd_tariff.value : gd_tariff = 0;
+		const ctFactor = Number(json.ct_factor?.value ?? 1);
+		const vtFactor = Number(json.vt_factor?.value ?? 1);
+		MeterEnergyFactor = Number.isInteger(ctFactor) && ctFactor > 0 && Number.isInteger(vtFactor) && vtFactor > 0
+			? ctFactor * vtFactor
+			: 1;
 	  	"conf" in json ? Dongle_Config = json.conf : Dongle_Config = "";
         "electr_netw_costs" in json ? electr_netw_costs = json.electr_netw_costs.value : electr_netw_costs = 0;
         "eid-enabled" in json ? eid_enabled = json["eid-enabled"]: eid_enabled = false;
@@ -3229,12 +3528,14 @@ function initSettingsSubTabsOnce() {
 function splitSettingsUI() {
   const table   = document.getElementById("settings_table");
   const general = document.getElementById("settings_general");
+  const smartMeter = document.getElementById("settings_smart_meter");
   const tariff  = document.getElementById("settings_tariff");
   const mqtt    = document.getElementById("settings_mqtt");
+  const meent   = document.getElementById("settings_meent");
   const modbus  = document.getElementById("settings_modbus");
   const tapelectric = document.getElementById("settings_tapelectric");
 
-  if ( !table || !general || !mqtt || !modbus || !tariff || !tapelectric ) return;
+  if ( !table || !general || !smartMeter || !mqtt || !meent || !modbus || !tariff || !tapelectric ) return;
 
   // velden op basis van "i" (dus zonder "settingR_")
   const MQTT_KEYS = new Set([
@@ -3263,11 +3564,24 @@ function splitSettingsUI() {
 	"water_netw_costs",
 	"gas_netw_costs"
   ]);
+
+  const SMART_METER_KEYS = [
+    "phases",
+    "fuse",
+    "ct_factor",
+    "vt_factor",
+    "overvoltage_threshold",
+    "try_calc_i"
+  ];
+  const SMART_METER_KEY_SET = new Set(SMART_METER_KEYS);
   
   const MODBUS_KEYS = new Set([
     "mb_map",
     "mb_id",
     "mb_port",
+    "victron_accu_enabled",
+    "victron_accu_ip",
+    "victron_accu_id",
     "mb_parity",
     "mb_baud",
     "mb_bits",
@@ -3279,6 +3593,7 @@ function splitSettingsUI() {
     "modbus_bits",
     "modbus_stop"
   ]);
+  const MEENT_KEYS = new Set(["meent_webid", "meent_api_key", "meent_interval"]);
 
   const TAP_KEYS = new Set([
     "tap-enabled",
@@ -3296,11 +3611,30 @@ function splitSettingsUI() {
     const key = id.startsWith("settingR_") ? id.substring("settingR_".length) : "";
 
     if (MQTT_KEYS.has(key)) mqtt.appendChild(row);
+    else if (MEENT_KEYS.has(key)) meent.appendChild(row);
+    else if (SMART_METER_KEY_SET.has(key)) smartMeter.appendChild(row);
     else if (TARIFF_KEYS.has(key)) tariff.appendChild(row);
     else if (MODBUS_KEYS.has(key)) modbus.appendChild(row);
     else if (TAP_KEYS.has(key)) tapelectric.appendChild(row);
     else general.appendChild(row);
   });
+
+  SMART_METER_KEYS.forEach(key => {
+    const row = document.getElementById(`settingR_${key}`);
+    if (row) smartMeter.appendChild(row);
+  });
+
+  // The HTML shell is shared by all firmware variants. Only POST_MEENT builds
+  // expose MEENT settings through the API, so hide the otherwise empty tab.
+  const hasMeentSettings = Array.from(MEENT_KEYS).some(key => document.getElementById(`settingR_${key}`));
+  const meentTabButton = document.querySelector('#settings_subtabs [data-target="settings_meent"]');
+  if (meentTabButton) meentTabButton.style.display = hasMeentSettings ? "" : "none";
+  if (!hasMeentSettings) {
+    meent.classList.remove("active");
+    const generalTabButton = document.querySelector('#settings_subtabs [data-target="settings_general"]');
+    const generalPane = document.getElementById("settings_general");
+    if (generalTabButton && generalTabButton.classList.contains("active")) generalPane?.classList.add("active");
+  }
 
   const mqttToggleRow = document.getElementById("settingR_mqtt_enabled");
   if (mqttToggleRow) mqtt.prepend(mqttToggleRow);
@@ -3312,6 +3646,7 @@ function splitSettingsUI() {
   if (tapMonitorCard) tapelectric.appendChild(tapMonitorCard);
   updateMQTTSettingsVisibility();
   updateTapSettingsVisibility();
+  updateVictronSettingsVisibility();
 }
 
 function updateMQTTSettingsVisibility() {
@@ -3335,6 +3670,17 @@ function updateTapSettingsVisibility() {
   tapPane.querySelectorAll(".settingDiv").forEach(row => {
     if (row.id === "settingR_tap-enabled") return;
     row.style.display = showTapFields ? "" : "none";
+  });
+}
+
+function updateVictronSettingsVisibility() {
+  const victronEnabled = document.getElementById("setFld_victron_accu_enabled");
+  if (!victronEnabled) return;
+
+  const showVictronFields = victronEnabled.checked;
+  ["victron_accu_ip", "victron_accu_id"].forEach(key => {
+    const row = document.getElementById(`settingR_${key}`);
+    if (row) row.style.display = showVictronFields ? "" : "none";
   });
 }
 
@@ -3640,6 +3986,7 @@ function initTapMonitorControls() {
 				{ v: 8, t: "KLEFR / INEPRO / Webasto Unite" },
 				{ v: 9, t: "Phoenix Contact EEM-XM3xx" },
 				{ v: 15, t: "Fronius SunSpec 203" },
+				{ v: 16, t: "EM24-TCP" },
 			  ];
 			
 			  const sel = document.createElement("select");
@@ -3827,7 +4174,7 @@ function initTapMonitorControls() {
 			  else {
 				switch (data[i].type) {
 				  case "s":
-					sInput.setAttribute("type", "text");
+				sInput.setAttribute("type", i === "meent_api_key" ? "password" : "text");
 					sInput.setAttribute("maxlength", data[i].max);
 					sInput.setAttribute("placeholder", "<max " + data[i].max + ">");
 					break;
@@ -3856,6 +4203,9 @@ function initTapMonitorControls() {
 			}
 			if (i === "tap-enabled") {
 			  sInput.addEventListener("change", updateTapSettingsVisibility);
+			}
+			if (i === "victron_accu_enabled") {
+			  sInput.addEventListener("change", updateVictronSettingsVisibility);
 			}
 			
 			inputDiv.appendChild(sInput);
@@ -4118,9 +4468,38 @@ function initTapMonitorControls() {
   //============================================================================  
   function saveSettings() 
   {
-    for( let i in objDAL.dev_settings )
+    let basicAuthSaveDone = Promise.resolve();
+    let skipBasicAuthFields = false;
+
+    if (document.getElementById("setFld_b_auth_user") && document.getElementById("setFld_b_auth_pw")) {
+      const oldAuthUser = objDAL.dev_settings.b_auth_user?.value ?? "";
+      const oldAuthPw = objDAL.dev_settings.b_auth_pw?.value ?? "";
+      const newAuthUser = document.getElementById("setFld_b_auth_user").value;
+      const newAuthPw = document.getElementById("setFld_b_auth_pw").value;
+
+      if (oldAuthUser && oldAuthUser != newAuthUser && oldAuthPw != newAuthPw) {
+        console.log("save data [basic_auth] => clear user, save pw, save user");
+        skipBasicAuthFields = true;
+        basicAuthSaveDone = sendPostSetting("b_auth_user", "")
+          .then(() => sendPostSetting("b_auth_pw", newAuthPw))
+          .then(() => {
+            if (newAuthUser) return sendPostSetting("b_auth_user", newAuthUser);
+          });
+      }
+    }
+
+    const settingKeys = Object.keys(objDAL.dev_settings).sort((a, b) => {
+      if (a === "b_auth_pw") return -1;
+      if (b === "b_auth_pw") return 1;
+      if (a === "b_auth_user") return 1;
+      if (b === "b_auth_user") return -1;
+      return 0;
+    });
+
+    for( let i of settingKeys )
     {
 	  if ( i == "conf" || document.getElementById("setFld_"+i ) == undefined ) continue;
+	  if ( skipBasicAuthFields && (i == "b_auth_user" || i == "b_auth_pw") ) continue;
 	  
 	  let fldId  = i;
       let newVal = document.getElementById("setFld_"+fldId).value;
@@ -4138,15 +4517,15 @@ function initTapMonitorControls() {
       }
     }    
     // delay refresh as all fetch functions are async!!
-    setTimeout(function() {
+    basicAuthSaveDone.then(() => setTimeout(function() {
 //       refreshSettings();
 			document.getElementById('settings_table').innerHTML = '';
 			objDAL.ensureDeviceInformation(true);
-	    }, 1000);
+	    }, 1000));
 //     ParseDevSettings();
   } // saveSettings()
-  
-  
+
+
   //============================================================================  
   function saveMeterReadings() 
   {
@@ -4213,7 +4592,7 @@ function initTapMonitorControls() {
         mode : "no-cors"
     };
 	Spinner(true);
-    fetch( URL_DEVICE_SETTINGS, other_params )
+    return fetch( URL_DEVICE_SETTINGS, other_params )
       .then(function(response) {
             //console.log(response.status );    //=> number 100–599
             //console.log(response.statusText); //=> String
@@ -4578,6 +4957,9 @@ function handle_menu_click()
 let translations = {};
 const FALLBACK_TRANSLATIONS = {
   nl: {
+    "accu-status-idle": "Inactief",
+    "accu-status-charging": "Laden",
+    "accu-status-discharging": "Ontladen",
     "net-action-on": "Schakelactie",
     "net-action-off": "Terugschakelactie",
     "net-direction": "Reageer op",
@@ -4598,6 +4980,9 @@ const FALLBACK_TRANSLATIONS = {
     "tip-history-graph-old-to-new": "X-as: oud naar nieuw. Klik voor nieuw naar oud."
   },
   en: {
+    "accu-status-idle": "Idle",
+    "accu-status-charging": "Charging",
+    "accu-status-discharging": "Discharging",
     "net-action-on": "Switch action",
     "net-action-off": "Switch-back action",
     "net-direction": "Respond to",
@@ -4618,6 +5003,9 @@ const FALLBACK_TRANSLATIONS = {
     "tip-history-graph-old-to-new": "X-axis: oldest to newest. Click for newest to oldest."
   },
   de: {
+    "accu-status-idle": "Inaktiv",
+    "accu-status-charging": "Laden",
+    "accu-status-discharging": "Entladen",
     "net-action-on": "Schaltaktion",
     "net-action-off": "Zurückschaltaktion",
     "net-direction": "Reagieren auf",
@@ -4638,6 +5026,9 @@ const FALLBACK_TRANSLATIONS = {
     "tip-history-graph-old-to-new": "X-Achse: alt nach neu. Klicken fur neu nach alt."
   },
   se: {
+    "accu-status-idle": "Inaktiv",
+    "accu-status-charging": "Laddar",
+    "accu-status-discharging": "Urladdning",
     "net-action-on": "Växlingsåtgärd",
     "net-action-off": "Återgångsåtgärd",
     "net-direction": "Reagera på",
@@ -4656,6 +5047,29 @@ const FALLBACK_TRANSLATIONS = {
     "lbl-history-order-old-to-new-short": "gammal→ny",
     "tip-history-graph-new-to-old": "X-axel: nyast till aldst. Klicka for aldst till nyast.",
     "tip-history-graph-old-to-new": "X-axel: aldst till nyast. Klicka for nyast till aldst."
+  },
+  fr: {
+    "accu-status-idle": "Inactif",
+    "accu-status-charging": "En charge",
+    "accu-status-discharging": "En décharge",
+    "net-action-on": "Action de commutation",
+    "net-action-off": "Action de retour",
+    "net-direction": "Réagir à",
+    "net-direction-return": "Injection",
+    "net-direction-deliver": "Consommation",
+    "net-value-on": "À partir de",
+    "net-value-off": "En dessous de",
+    "net-intro-2": "Shelly/IO devient",
+    "net-off-state": "Shelly/IO devient",
+    "net-threshold-error": "Le seuil de retour doit être inférieur au seuil de commutation.",
+    "net-unit-watt": "Watt",
+    "net-unit-seconds": "secondes",
+    "net-on-delay": "Délai",
+    "net-off-delay": "Délai",
+    "lbl-history-order-new-to-old-short": "récent→ancien",
+    "lbl-history-order-old-to-new-short": "ancien→récent",
+    "tip-history-graph-new-to-old": "Axe X : du plus récent au plus ancien. Cliquez pour inverser l'ordre.",
+    "tip-history-graph-old-to-new": "Axe X : du plus ancien au plus récent. Cliquez pour inverser l'ordre."
   }
 };
 const URL_I18N = typeof DEBUG !== 'undefined' && DEBUG
@@ -4677,7 +5091,13 @@ function applyTranslations() {
     const translation = t(key);
     if (translation !== key) el.innerHTML = translation;
   });
+  document.querySelectorAll('[data-i18n-value]').forEach(el => {
+    const key = el.getAttribute('data-i18n-value');
+    const translation = t(key);
+    if (translation !== key) el.value = translation;
+  });
   updateBrowserSettingsControls();
+  updateDashboardControls();
   NetSwitchUpdateBar();
 }
 
@@ -4689,11 +5109,17 @@ function changeLanguage(lang) {
 }
 
 function loadTranslations(lang) {
-	console.log(URL_I18N + `/${lang}.json`);
-  fetch( URL_I18N + `/${lang}.json` )
-    .then(response => response.json())
-    .then(json => {
-      translations = json;
+  const languages = lang === 'en' ? ['en'] : ['en', lang];
+  Promise.all(languages.map(language => {
+    const url = URL_I18N + `/${language}.json`;
+    console.log(url);
+    return fetch(url).then(response => {
+      if (!response.ok) throw new Error(`Could not load ${language} translations`);
+      return response.json();
+    });
+  }))
+    .then(jsons => {
+      translations = Object.assign({}, ...jsons);
       applyTranslations();
     })
     .catch(err => console.error("Error fetching lang file:", err));

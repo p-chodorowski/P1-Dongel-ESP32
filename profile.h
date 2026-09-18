@@ -17,6 +17,11 @@
   #define MB_RTU
   #define RTU_SERIAL          Serial2
 
+  // Fixed Modbus RTU pinout for P1UM (Ultra V1 and Mini).
+  #define RXPIN               1
+  #define TXPIN               3
+  #define RTSPIN              2
+
 #elif defined(ETHERNET)
 
   #define NETSWITCH
@@ -76,6 +81,8 @@
     #define OTAURL_PREFIX     DIRECT_AP_OTAURL_PREFIX
   #elif defined(POST_POWERCH)
     #define OTAURL_PREFIX     "pc/"
+  #elif defined(POST_KEMP)
+    #define OTAURL_PREFIX     "kemp/"
   #else
     #define OTAURL_PREFIX     ""
   #endif
