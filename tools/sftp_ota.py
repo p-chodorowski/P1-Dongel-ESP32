@@ -135,6 +135,8 @@ def sftp_command(target: SftpTarget, batch_path: Path) -> list[str]:
             str(batch_path),
             "-o",
             f"Port={target.port}",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
         ]
     )
     if target.identity is not None:

@@ -82,6 +82,7 @@ class SftpOtaTests(unittest.TestCase):
         cmd = sftp_ota.sftp_command(target, Path("/tmp/batch"))
         self.assertEqual(cmd[0], "sftp")
         self.assertIn("BatchMode=yes", cmd)
+        self.assertIn("StrictHostKeyChecking=accept-new", cmd)
         self.assertIn("/tmp/id_ota", cmd)
         self.assertIn("deploy@209.38.55.197", cmd)
         joined = " ".join(cmd).lower()
