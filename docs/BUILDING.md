@@ -184,6 +184,10 @@ Use `build.sh` to compile all profiles. It injects profile-specific defines and 
 - ESP32-S3 builds must always use the 8MB partition scheme (`FlashSize=8M`, `PartitionScheme=default_8MB`, OTA 3MB / matching 8MB layout).
 - `ULTRA` -> `ESP32S3`, `FlashSize=8M`, `PartitionScheme=default_8MB`
 
+When compiling this sketch from Arduino IDE 2 (with `#define ULTRA` enabled), set **Tools** to the ULTRA list in `P1-Dongel-ESP32.ino` / `sketch.yaml`. Arduino IDE 2.3 does not apply `sketch.yaml` to the Tools menu; it remembers the last Tools choices per sketch. A 4MB flash size with the 8MB partition table will boot-loop (`partition 3 invalid ... exceeds flash chip size 0x400000`).
+
+`arduino-cli compile` / `upload` without `--fqbn` uses `default_fqbn` from `sketch.yaml` (ULTRA, 8MB).
+
 ## 8) Libraries used by this project
 
 The codebase uses a mix of libraries from the ESP32 Arduino core and a small set of external libraries that must be installed separately.

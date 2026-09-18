@@ -1,0 +1,14 @@
+# Arduino CLI sketch project file.
+# Arduino IDE 2.3 does not load these Tools options automatically; set them in
+# Tools as well. Pairing default_8MB with FlashSize=4M brick-boots the Ultra.
+#
+# C3 profiles (P1P / ETH / NRG), for --fqbn only — do not use as default_fqbn:
+#   esp32:esp32:esp32c3:UploadSpeed=921600,CDCOnBoot=default,CPUFreq=160,FlashMode=qio,FlashSize=4M,PartitionScheme=min_spiffs,DebugLevel=none,EraseFlash=none
+#
+# No default_profile: a profile build isolates platforms/libraries from the
+# system sketchbook this project depends on.
+
+default_fqbn: esp32:esp32:esp32s3:UploadSpeed=921600,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=8M,PartitionScheme=default_8MB,DebugLevel=none,PSRAM=disabled,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default
+default_protocol: serial
+default_port_config:
+  baudrate: 115200

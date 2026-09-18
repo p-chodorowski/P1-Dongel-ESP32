@@ -42,15 +42,29 @@ Planner display checks
 - uur overgang
 
 ************************************************************************************
-Arduino-IDE settings for P1 Dongle hardware ESP32:
+Arduino IDE Tools settings (must match the active #define profile below):
+
+  ULTRA  (ESP32-S3, 8MB flash — official P1 Dongle Ultra):
+  - Board: "ESP32S3 Dev Module"
+  - Flash Size: "8MB (64Mb)"
+  - Partition Scheme: "8M with spiffs (3MB APP/1.5MB SPIFFS)"
+  - Flash Mode: "QIO 80MHz"
+  - PSRAM: "Disabled"
+  - CPU Frequency: "240MHz (WiFi)"
+  - Upload Speed: "921600"
+  Do not use Flash Size 4MB with this partition scheme. The bootloader then
+  reports: partition 3 invalid ... exceeds flash chip size 0x400000.
+
+  P1P / ETH / NRG  (ESP32-C3, 4MB flash):
   - Board: "ESP32C3 Dev Module"
-  - Flash mode: "QIO"
-  - Flash size: "4MB (32Mb)"
-  - CorenDebug Level: "None"
-  - Flash Frequency: "80MHz"
-  - CPU Frequency: "160MHz"
-  - Upload Speed: "961600"                                                                                
-  - Port: <select port>
+  - Flash Size: "4MB (32Mb)"
+  - Partition Scheme: "Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)"
+  - Flash Mode: "QIO"
+  - CPU Frequency: "160MHz (WiFi)"
+  - Upload Speed: "921600"
+
+  Shared: Core Debug Level "None". Port: select the dongle COM port.
+  These FQBNs also live in sketch.yaml (arduino-cli default_fqbn = ULTRA).
 
 5.9.0
 - SDK 3.3.10
