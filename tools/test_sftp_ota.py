@@ -131,6 +131,7 @@ class SftpOtaTests(unittest.TestCase):
         self.assertIn("secrets.OTA_SFTP_PATH", text)
         self.assertIn("secrets.OTA_SFTP_KEY", text)
         self.assertIn("secrets.OTA_SFTP_PASSWORD", text)
+        self.assertIn("SFTP secrets not set; skip upload", text)
         self.assertNotIn("ftp://", text.lower())
         self.assertNotRegex(text, r"(?i)(BEGIN OPENSSH|BEGIN RSA) ")
 
