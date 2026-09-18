@@ -1,3 +1,4 @@
+# Ultra CI / tools/compile_ultra.py: Espressif index + git libs (dsmr3Lib, eModbus, …).
 board_manager:
   additional_urls:
     - https://espressif.github.io/arduino-esp32/package_esp32_index.json

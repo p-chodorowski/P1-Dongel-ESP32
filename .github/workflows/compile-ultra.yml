@@ -35,6 +35,11 @@ jobs:
       - name: Install arduino-cli
         uses: arduino/setup-arduino-cli@v2
 
+      - name: Check Ultra compile config
+        run: |
+          python3 tools/test_compile_ultra.py
+          python3 tools/test_sftp_ota.py
+
       - name: Compile Ultra and stage OTA files
         env:
           OTA_CHANNEL: ${{ github.event.inputs.ota_channel || 'production' }}
@@ -60,3 +65,41 @@ jobs:
           for p in sorted(Path("dist/ultra").iterdir()):
               print(f"{p.name}\t{p.stat().st_size}")
           PY
+
+      # Always runs. Exits 0 (job stays green) when required secrets are empty.
+      # Required: OTA_SFTP_HOST, OTA_SFTP_USER, OTA_SFTP_PATH, and KEY or PASSWORD.
+      - name: Publish Ultra OTA over SFTP
+        env:
+          OTA_SFTP_HOST: ${{ secrets.OTA_SFTP_HOST }}
+          OTA_SFTP_USER: ${{ secrets.OTA_SFTP_USER }}
+          OTA_SFTP_PATH: ${{ secrets.OTA_SFTP_PATH }}
+          OTA_SFTP_PATH_TEST: ${{ secrets.OTA_SFTP_PATH_TEST }}
+          OTA_SFTP_PORT: ${{ secrets.OTA_SFTP_PORT }}
+          OTA_SFTP_KEY: ${{ secrets.OTA_SFTP_KEY }}
+          OTA_SFTP_PASSWORD: ${{ secrets.OTA_SFTP_PASSWORD }}
+          OTA_CHANNEL: ${{ github.event.inputs.ota_channel || 'production' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OTA_SFTP_HOST:-}" ] || [ -z "${OTA_SFTP_USER:-}" ] || [ -z "${OTA_SFTP_PATH:-}" ]; then
+            echo "SFTP secrets not set; skip upload"
+            exit 0
+          fi
+          if [ -z "${OTA_SFTP_KEY:-}" ] && [ -z "${OTA_SFTP_PASSWORD:-}" ]; then
+            echo "SFTP auth secret not set; skip upload"
+            exit 0
+          fi
+          extra=()
+          if [ -n "${OTA_SFTP_KEY}" ]; then
+            key="$RUNNER_TEMP/ota_sftp_key"
+            printf '%s\n' "$OTA_SFTP_KEY" > "$key"
+            chmod 600 "$key"
+            extra+=(--identity "$key")
+          elif [ -n "${OTA_SFTP_PASSWORD}" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq sshpass
+          fi
+          echo "SFTP upload starting (host/user/key values not printed)"
+          python3 tools/sftp_ota.py --dir dist/ultra --channel "$OTA_CHANNEL" "${extra[@]}"
+          if [ -n "${key:-}" ]; then
+            rm -f "$key"
+          fi

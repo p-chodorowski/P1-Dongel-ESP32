@@ -59,6 +59,20 @@ def main() -> int:
             f'-DEXPECTED_OTAURL="{ULTRA_TEST_URL}"',
         ]
     )
+    # Latest main enables POST_MEENT; Ultra must still use our directory.
+    compile_and_run(
+        [
+            "-DULTRA",
+            "-DPOST_MEENT",
+            f'-DEXPECTED_OTAURL="{ULTRA_URL}"',
+        ]
+    )
+    header = (ROOT / "DSMRloggerAPI.h").read_text(encoding="utf-8")
+    if "http://ota.smart-stuff.nl/p1u/v5/me/" in header:
+        if "#if defined(POST_MEENT) && !defined(ULTRA)" not in header:
+            raise SystemExit(
+                "POST_MEENT vendor OTA URL must not apply to ULTRA (use profile.h OTAURL)"
+            )
     return 0
 
 

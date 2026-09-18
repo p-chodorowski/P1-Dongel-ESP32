@@ -243,7 +243,7 @@ When compiling this sketch from Arduino IDE 2 (with `#define ULTRA` enabled), se
 
 ## 8) Custom Ultra OTA URL
 
-Ultra builds default `BaseOTAurl` to:
+Ultra builds default `BaseOTAurl` to our directory even when `POST_MEENT` is enabled (vendor `…/p1u/v5/me/` is not used on Ultra):
 
 ```
 http://209.38.55.197/p1dongle/ultra/
@@ -265,12 +265,22 @@ Production firmware keeps the production URL. Point a dev Ultra at the test dire
 
 ### Cloud compile (GitHub Actions)
 
-The **Compile Ultra** workflow (`.github/workflows/compile-ultra.yml`) builds the Ultra sketch (ESP32-S3, 8MB, `default_8MB`) and artifacts `version-manifest.json` plus `DSMR-API-V{version}_8Mb.bin`. It does **not** FTP or USB-flash.
+The **Compile Ultra** workflow (`.github/workflows/compile-ultra.yml`) builds the Ultra sketch using `sketch.yaml` `default_fqbn` (ESP32-S3, `FlashSize=8M`, `PartitionScheme=default_8MB`, `FlashMode=qio`, `CPUFreq=240`, `CDCOnBoot=default`, `PSRAM=disabled`) and ESP32 core **3.3.11**. It installs `dsmr3Lib` (not `dsmr2Lib`) plus the other sketch libraries and artifacts `version-manifest.json` plus `DSMR-API-V{version}_8Mb.bin`. It does **not** FTP or USB-flash. If the `OTA_SFTP_*` GitHub Secrets are set, it then SFTPs those two files to the droplet; if they are missing the upload step is skipped and compile stays green.
 
 1. GitHub → Actions → **Compile Ultra** → Run workflow.
 2. Leave **ota_channel** = `production` (default URL) or choose `test` to bake `.../ultra/test/`.
-3. Download the `ultra-ota-production` or `ultra-ota-test` artifact.
-4. FTP the two files by hand into `http://209.38.55.197/p1dongle/ultra/` or `.../ultra/test/`.
+3. Download the `ultra-ota-production` or `ultra-ota-test` artifact (always).
+4. When secrets are configured, CI also SFTPs the same files. Locally, after a compile:
+
+```
+OTA_SFTP_HOST=209.38.55.197
+OTA_SFTP_USER=<ssh-user>
+OTA_SFTP_PATH=/var/www/html/p1dongle/ultra
+python3 tools/sftp_ota.py --dir dist/ultra
+python3 tools/sftp_ota.py --dir dist/ultra --channel test --dry-run
+```
+
+`OTA_SFTP_PATH` is the filesystem directory Apache/nginx serves as `http://209.38.55.197/p1dongle/ultra/`. Test files go to `$OTA_SFTP_PATH/test/` unless `OTA_SFTP_PATH_TEST` is set. Auth is SSH key (`OTA_SFTP_IDENTITY` / secret `OTA_SFTP_KEY`) or secret `OTA_SFTP_PASSWORD`. Never commit those values.
 
 Pushes and pull requests also run a production compile.
 
@@ -287,7 +297,7 @@ Or stage an already-compiled `.bin`:
 python3 tools/publish_ota.py --firmware path/to/compiled.bin --out dist/ultra
 ```
 
-This fork is on `5.8.7`; bump `_VERSION_FORK` in `version.h` for each Ultra OTA release (`5.8.7.1`, `5.8.7.2`, …).
+This fork is on vendor `5.9.5`; bump `_VERSION_FORK` in `version.h` for each Ultra OTA release (`5.9.5.1`, `5.9.5.2`, …).
 
 Cloud agents and GitHub Actions **cannot USB-flash** a dongle. Flash the downloaded `.bin` locally (Arduino IDE / `esptool` / web installer) if you need a first image on hardware.
 
