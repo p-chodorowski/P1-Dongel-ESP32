@@ -5110,7 +5110,7 @@ const FALLBACK_TRANSLATIONS = {
 const URL_I18N = typeof DEBUG !== 'undefined' && DEBUG
   ? "http://localhost/~martijn/dsmr-api/v5/lang"
   : (typeof CDN_BASE !== 'undefined' ? CDN_BASE
-       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn") + "/lang";
+       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.4/cdn") + "/lang";
 
 function t(key) {
   return translations[key] || FALLBACK_TRANSLATIONS[locale]?.[key] || FALLBACK_TRANSLATIONS.en[key] || key;

@@ -5,7 +5,7 @@
 #define SETTINGS_FILE       "/DSMRsettings.json"
 #define HOST_DATA_FILES     "cdn.jsdelivr.net"
 // Frontend CDN tag is the full Ultra version, including the fork digit.
-// 5.9.5.3 loads p-chodorowski/P1-Dongel-ESP32@5.9.5.3. The vendor tag 5.9.5
+// 5.9.5.4 loads p-chodorowski/P1-Dongel-ESP32@5.9.5.4. The vendor tag 5.9.5
 // is already published and must not be reused. Push the Ultra tag before
 // shipping the bin; jsDelivr only serves tags that are already public.
 // cdn/cdn-config.js reads the same tag from the script URL that loaded it.

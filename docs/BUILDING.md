@@ -129,8 +129,8 @@ shell (`/DSMRindexEDGE.html`) on LittleFS and pulls the rest of the frontend
 (`DSMRindex.js`, `DSMRindex_body.html`, language files, CSS) from jsDelivr.
 
 The CDN tag is the full Ultra version, including the fork digit (`CDN_FORK_REF`
-in `Config.h`, derived from `version.h`). Firmware `5.9.5.3` loads
-`p-chodorowski/P1-Dongel-ESP32@5.9.5.3`. Do not reuse the vendor tag `5.9.5`;
+in `Config.h`, derived from `version.h`). Firmware `5.9.5.4` loads
+`p-chodorowski/P1-Dongel-ESP32@5.9.5.4`. Do not reuse the vendor tag `5.9.5`;
 that tag is already published.
 
 - `cdn/cdn-config.js` reads that tag from its own script URL.
@@ -156,23 +156,23 @@ Electric fields into the wrong settings tab). Always pin to a tag.
 ### Releasing a new frontend
 
 1. Land all `cdn/` and `data/DSMRindexEDGE.html` changes on `main` and bump
-   `_VERSION_FORK` in `version.h` (e.g. `5.9.5.3`). Keep the `@<ver>` URLs in
+   `_VERSION_FORK` in `version.h` (e.g. `5.9.5.4`). Keep the `@<ver>` URLs in
    `data/DSMRindexEDGE.html` on that same full version tag.
 2. Commit, then tag and push to the **public** GitHub fork (jsDelivr only serves
    public repos). Do this before devices running that firmware boot, otherwise
    the UI download fails and the previous shell stays in place:
 
    ```bash
-   git tag 5.9.5.3
-   git push origin main 5.9.5.3
+   git tag 5.9.5.4
+   git push origin main 5.9.5.4
    ```
 
 3. Verify jsDelivr is serving the tag before flashing. Open the assets
    directly and confirm the expected content is present:
 
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn/DSMRindex.js`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.4/cdn/DSMRindex.js`
      should contain `TAP_KEYS`.
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn/DSMRindex_body.html`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.4/cdn/DSMRindex_body.html`
      should contain `settings_tapelectric`.
 
 4. Flash or OTA. On boot the device replaces `/DSMRindexEDGE.html` when the
