@@ -18,15 +18,117 @@ int32_t freeSpace()
 } // freeSpace()
 
 //===========================================================================================
+String indexRefPath()
+{
+  return String(settingIndexPage) + ".ver";
+}
+
+bool indexFileUsable(const char* path)
+{
+  File file = LittleFS.open(path, "r");
+  if (!file) return false;
+  const size_t size = file.size();
+  file.close();
+  return size > 200;
+}
+
+bool FirmwareIndexPinned()
+{
+  File file = LittleFS.open(indexRefPath(), "r");
+  if (!file) return false;
+  String ref = file.readString();
+  file.close();
+  ref.trim();
+  return ref == CDN_FORK_REF;
+}
+
+void writeFirmwareIndexRef()
+{
+  File file = LittleFS.open(indexRefPath(), "w");
+  if (!file) return;
+  file.print(CDN_FORK_REF);
+  file.close();
+}
+
+String RewriteFirmwareCdnRefs(const String& html)
+{
+  if (!FirmwareIndexPinned()) return html;
+
+  const String marker = String(CDN_FORK_REPO) + "@";
+  const String pinned = marker + CDN_FORK_REF;
+  String out;
+  out.reserve(html.length() + 32);
+  int pos = 0;
+  while (pos < (int)html.length()) {
+    const int at = html.indexOf(marker, pos);
+    if (at < 0) {
+      out += html.substring(pos);
+      break;
+    }
+    const int slash = html.indexOf('/', at + marker.length());
+    if (slash < 0) {
+      out += html.substring(pos);
+      break;
+    }
+    out += html.substring(pos, at);
+    out += pinned;
+    pos = slash;
+  }
+  return out;
+}
+
+void SendCachedIndexPage()
+{
+  File file = LittleFS.open(settingIndexPage, "r");
+  if (!file) {
+    httpServer.send(404, "text/plain", F("FileNotFound\r\n"));
+    return;
+  }
+
+  httpServer.sendHeader("Cache-Control", "no-store, max-age=0");
+  httpServer.sendHeader("Pragma", "no-cache");
+  if (!FirmwareIndexPinned() || file.size() > 32768) {
+    httpServer.streamFile(file, "text/html");
+    file.close();
+    return;
+  }
+
+  const String html = RewriteFirmwareCdnRefs(file.readString());
+  file.close();
+  httpServer.send(200, "text/html", html);
+}
+
+//===========================================================================================
 bool EnsureIndexFilePresent()
 {
-  if (DSMRfileExist(settingIndexPage, false)) return true;
+  const bool exists = indexFileUsable(settingIndexPage);
+  if (exists && FirmwareIndexPinned()) return true;
 
-  DebugTln(F("Oeps! Index file not pressent, try to download it!\r"));
-  if (GetFile(settingIndexPage, PATH_DATA_FILES) && DSMRfileExist(settingIndexPage, false)) return true;
+  String backup;
+  if (exists) {
+    DebugTln(F("Index UI does not match firmware, refreshing"));
+    backup = String(settingIndexPage) + ".bak";
+    LittleFS.remove(backup);
+    if (!LittleFS.rename(settingIndexPage, backup.c_str())) return true;
+  } else {
+    DebugTln(F("Oeps! Index file not pressent, try to download it!\r"));
+  }
+
+  if (GetFile(settingIndexPage, PATH_DATA_FILES) && indexFileUsable(settingIndexPage)) {
+    if (backup.length()) LittleFS.remove(backup);
+    writeFirmwareIndexRef();
+    return true;
+  }
+
+  LittleFS.remove(settingIndexPage);
+  if (backup.length() && LittleFS.exists(backup)) {
+    LittleFS.rename(backup.c_str(), settingIndexPage);
+    DebugTln(F("Keeping installed index until the versioned UI can be downloaded"));
+    return true;
+  }
 
   DebugTln(F("Index file not found at version URL, try fallback URL!\r"));
-  if (GetFile(settingIndexPage, URL_INDEX_FALLBACK) && DSMRfileExist(settingIndexPage, false)) return true;
+  if (GetFile(settingIndexPage, URL_INDEX_FALLBACK) && indexFileUsable(settingIndexPage)) return true;
 
   DebugTln(F("Index file still not pressent!\r"));
   return false;

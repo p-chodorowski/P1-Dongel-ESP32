@@ -201,7 +201,10 @@ bool RemoteUpdateNow(const char* versie, bool sketch, String* errorDetail) {
 
       case HTTP_UPDATE_OK:
         ok = true;
-        if ( RemoveIndexAfterUpdate ) LittleFS.remove("/DSMRindexEDGE.html");
+        if ( RemoveIndexAfterUpdate ) {
+          LittleFS.remove("/DSMRindexEDGE.html");
+          LittleFS.remove("/DSMRindexEDGE.html.ver");
+        }
         LogFile("reboot: after update OK",false);
         P1Reboot();
         break;

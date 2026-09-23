@@ -2195,6 +2195,36 @@ function parseDeviceInfo(obj) {
     objDAL?.refreshESPHomeManifest?.();
   }
   renderESPHomeMigrationCard();
+  maybeReloadFrontendForFirmware(devVersion);
+}
+
+function uiReleaseTag(version) {
+  const parts = parseOtaVersionParts(version);
+  if (!parts.major && !parts.minor && !parts.fix) return "";
+  return parts.major + "." + parts.minor + "." + parts.fix;
+}
+
+function reloadFrontendAfterUpdate() {
+  const key = "ota-" + Date.now();
+  try {
+    if (sessionStorage.getItem("uiReloadFor") === key) return;
+    sessionStorage.setItem("uiReloadFor", key);
+  } catch (e) {}
+  window.location.replace("/?ui=" + encodeURIComponent(key));
+}
+
+function maybeReloadFrontendForFirmware(fwversion) {
+  try {
+    if (sessionStorage.getItem(SESSION_UPDATE_KIND) === "esphome") return;
+  } catch (e) {}
+  const firmwareTag = uiReleaseTag(fwversion);
+  const uiTag = uiReleaseTag(typeof CDN_REF !== "undefined" ? CDN_REF : "");
+  if (!firmwareTag || !uiTag || firmwareTag === uiTag) return;
+  try {
+    if (sessionStorage.getItem("uiReloadFor") === firmwareTag) return;
+    sessionStorage.setItem("uiReloadFor", firmwareTag);
+  } catch (e) {}
+  window.location.replace("/?ui=" + encodeURIComponent(firmwareTag));
 }
     
 function closeUpdate() {
@@ -2203,8 +2233,7 @@ function closeUpdate() {
 	if (progressWrap) progressWrap.style.display = "block";
 	document.getElementById("updateSpinner")?.setAttribute("hidden", "");
 	sessionStorage.removeItem(SESSION_UPDATE_KIND);
-	document.location.href="/";
-	// location.reload();
+	reloadFrontendAfterUpdate();
 }    
 
 function showUpdateOverlay(statusText, progressWidth = 0, useSpinner = false) {
@@ -2598,10 +2627,12 @@ function checkESPOnline() {
 				clearInterval(checkInterval);
 				checkInterval = null;
 				clearInterval(update_interval);
-			update_interval = null;
-			otaMonitorActive = false;
-			progressBar.style.width = "100%";
-			document.getElementById("updatestatus").innerText = t("lbl_update_done");
+				update_interval = null;
+				otaMonitorActive = false;
+				if (progressBar) progressBar.style.width = "100%";
+				document.getElementById("updatestatus").innerText = t("lbl_update_done");
+				reloadFrontendAfterUpdate();
+				return;
 		}
 	}
 // 	console.log("time parsed .., data is ["+ JSON.stringify(json)+"]");
@@ -5076,7 +5107,7 @@ const FALLBACK_TRANSLATIONS = {
 const URL_I18N = typeof DEBUG !== 'undefined' && DEBUG
   ? "http://localhost/~martijn/dsmr-api/v5/lang"
   : (typeof CDN_BASE !== 'undefined' ? CDN_BASE
-       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.7/cdn") + "/lang";
+       : "https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn") + "/lang";
 
 function t(key) {
   return translations[key] || FALLBACK_TRANSLATIONS[locale]?.[key] || FALLBACK_TRANSLATIONS.en[key] || key;

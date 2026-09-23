@@ -4,12 +4,16 @@
 #define LED_OFF             HIGH
 #define SETTINGS_FILE       "/DSMRsettings.json"
 #define HOST_DATA_FILES     "cdn.jsdelivr.net"
-// Fork frontend CDN (public repo required for jsDelivr). Switch CDN_FORK_REF to
-// P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "." P1_STR(_VERSION_PATCH)
-// after tagging each release (git tag 5.8.7 && git push origin 5.8.7).
-// Keep CDN_FORK_REPO / CDN_FORK_REF in sync with cdn/cdn-config.js (CDN_REPO / CDN_REF).
+// Frontend CDN tag is the full Ultra version, including the fork digit.
+// 5.9.5.3 loads p-chodorowski/P1-Dongel-ESP32@5.9.5.3. The vendor tag 5.9.5
+// is already published and must not be reused. Push the Ultra tag before
+// shipping the bin; jsDelivr only serves tags that are already public.
+// cdn/cdn-config.js reads the same tag from the script URL that loaded it.
+#ifndef P1_STR
+#include "version.h"
+#endif
 #define CDN_FORK_REPO       "p-chodorowski/P1-Dongel-ESP32"
-#define CDN_FORK_REF        "5.8.7"
+#define CDN_FORK_REF        P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "." P1_STR(_VERSION_PATCH) "." P1_STR(_VERSION_FORK)
 #define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/" CDN_FORK_REPO "@" CDN_FORK_REF "/data"
 #define URL_INDEX_FALLBACK  "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@latest/data"
 

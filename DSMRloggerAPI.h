@@ -198,6 +198,9 @@ static inline void CrashLogPrint() {}
 static inline void CrashLogPersistAbnormalReset() {}
 #endif
 bool EnsureIndexFilePresent();
+bool FirmwareIndexPinned();
+String RewriteFirmwareCdnRefs(const String& html);
+void SendCachedIndexPage();
 void P1StatusWrite();
 void P1StatusWriteDirect();
 bool RngWritePending();

@@ -84,21 +84,16 @@ static void handleApiSmFieldGet() {
 
 static void handleRootGet() {
   if (!auth()) return;
-  if (!EnsureIndexFilePresent()) {
+  // Boot already refreshes a stale shell. Here, only fetch when the file is missing
+  // so a page view does not block on the CDN.
+  if (!LittleFS.exists(settingIndexPage) && !EnsureIndexFilePresent()) {
     FSNotPopulated = true;
     httpServer.send(503, "text/plain", F("Frontend unavailable, retry later\r\n"));
     return;
   }
   FSNotPopulated = false;
 
-  File file = LittleFS.open(settingIndexPage, "r");
-  if (file) {
-    httpServer.streamFile(file, "text/html");
-    file.close();
-    return;
-  }
-
-  httpServer.send(404, "text/plain", F("FileNotFound\r\n"));
+  SendCachedIndexPage();
 }
 
 static void handleHttpNotFound() {
@@ -130,7 +125,6 @@ void setupFSexplorer() {
     DebugTln(F("FS not populated -> frontend recovery enabled\r"));
   } else {
     DebugTln(F("FS correct populated -> normal operation!\r"));
-    httpServer.serveStatic("/", LittleFS, settingIndexPage);
   }
 #else
   DebugTln(F("DirectAP closed-network mode -> API only\r"));

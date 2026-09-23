@@ -128,18 +128,19 @@ The web UI is not served from the device; the device only caches a small index
 shell (`/DSMRindexEDGE.html`) on LittleFS and pulls the rest of the frontend
 (`DSMRindex.js`, `DSMRindex_body.html`, language files, CSS) from jsDelivr.
 
-The CDN ref is defined in four places that must stay in sync:
+The CDN tag is the full Ultra version, including the fork digit (`CDN_FORK_REF`
+in `Config.h`, derived from `version.h`). Firmware `5.9.5.3` loads
+`p-chodorowski/P1-Dongel-ESP32@5.9.5.3`. Do not reuse the vendor tag `5.9.5`;
+that tag is already published.
 
-- Firmware index download: `CDN_FORK_REPO` / `CDN_FORK_REF` in `Config.h`
-  (used to build `PATH_DATA_FILES`).
-- Browser asset loading: `CDN_REPO` / `CDN_REF` in `cdn/cdn-config.js`
-  (used to build `CDN_BASE`, which `DSMRindex.js` uses for language files).
-- The flashed index shell `data/DSMRindexEDGE.html` (all asset `<script>`/`<link>`
-  URLs and the `readPageBody()` body fetch).
-- The hardcoded language-URL fallback in `cdn/DSMRindex.js` (used only when
-  `CDN_BASE` is unset).
-
-All four are pinned to the release tag `p-chodorowski/P1-Dongel-ESP32@5.8.7`.
+- `cdn/cdn-config.js` reads that tag from its own script URL.
+- `data/DSMRindexEDGE.html` is the shell cached on the device. After a
+  successful download of the matching tag, the firmware rewrites every
+  `p-chodorowski/P1-Dongel-ESP32@...` URL to the running release and sends
+  `Cache-Control: no-store`.
+- `EnsureIndexFilePresent()` replaces the cached shell when its UI ref does
+  not match the firmware. The previous shell is kept if the versioned URL
+  cannot be downloaded.
 
 ### Branching model
 
@@ -155,32 +156,30 @@ Electric fields into the wrong settings tab). Always pin to a tag.
 ### Releasing a new frontend
 
 1. Land all `cdn/` and `data/DSMRindexEDGE.html` changes on `main` and bump
-   `version.h` (e.g. `5.8.7`).
-2. Set the new version in all four locations above (`CDN_FORK_REF`, `CDN_REF`,
-   every `@<ver>` URL in `data/DSMRindexEDGE.html`, and the fallback in
-   `cdn/DSMRindex.js`).
-3. Commit, then tag and push to the **public** GitHub fork (jsDelivr only serves
-   public repos):
+   `_VERSION_FORK` in `version.h` (e.g. `5.9.5.3`). Keep the `@<ver>` URLs in
+   `data/DSMRindexEDGE.html` on that same full version tag.
+2. Commit, then tag and push to the **public** GitHub fork (jsDelivr only serves
+   public repos). Do this before devices running that firmware boot, otherwise
+   the UI download fails and the previous shell stays in place:
 
    ```bash
-   git tag 5.8.7
-   git push origin main 5.8.7
+   git tag 5.9.5.3
+   git push origin main 5.9.5.3
    ```
 
-4. Verify jsDelivr is serving the pinned tag before flashing. Open the assets
+3. Verify jsDelivr is serving the tag before flashing. Open the assets
    directly and confirm the expected content is present:
 
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.7/cdn/DSMRindex.js`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn/DSMRindex.js`
      should contain `TAP_KEYS`.
-   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.8.7/cdn/DSMRindex_body.html`
+   - `https://cdn.jsdelivr.net/gh/p-chodorowski/P1-Dongel-ESP32@5.9.5.3/cdn/DSMRindex_body.html`
      should contain `settings_tapelectric`.
 
-5. On the device, delete the cached `/DSMRindexEDGE.html` (via the file manager
-   or telnet) and reboot. `EnsureIndexFilePresent()` in `FS.ino` only
-   re-downloads the index when it is missing, so an old cached shell will keep
-   loading until you remove it.
-6. Hard-refresh the browser (Ctrl+Shift+R / Ctrl+F5) to bypass the browser
-   cache. In the Settings panel, the Tap Electric tab should render four fields;
+4. Flash or OTA. On boot the device replaces `/DSMRindexEDGE.html` when the
+   stored UI ref differs from the firmware. After a successful update the page
+   reloads itself. A browser that still has the previous UI open needs one
+   refresh if that UI predates this reload behavior. In the Settings panel, the
+   Tap Electric tab should render four fields;
    `document.querySelectorAll('#settings_tapelectric .settingDiv').length`
    returns `4` in the browser console.
 
