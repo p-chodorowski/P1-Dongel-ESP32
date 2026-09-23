@@ -2201,7 +2201,8 @@ function parseDeviceInfo(obj) {
 function uiReleaseTag(version) {
   const parts = parseOtaVersionParts(version);
   if (!parts.major && !parts.minor && !parts.fix) return "";
-  return parts.major + "." + parts.minor + "." + parts.fix;
+  const tag = parts.major + "." + parts.minor + "." + parts.fix;
+  return parts.fork ? tag + "." + parts.fork : tag;
 }
 
 function reloadFrontendAfterUpdate() {
@@ -2462,7 +2463,9 @@ function UpdateStart( msg ){
 		const decoded = decodeURIComponent(String(detail || "").replace(/\+/g, " "));
 		showUpdateOverlay("Error: " + (decoded || ""), 0, currentUpdateKind === "esphome");
 	} else {
-		otaSeenRunning = false;
+		// Treat the update as started immediately. The dongle reboots before the
+		// next poll can report "running", and the page must still reload.
+		otaSeenRunning = true;
 		otaMonitorActive = true;
 		if (currentUpdateKind === "esphome") {
 			showUpdateOverlay(t("txt-esphome-progress").replace("{seconds}", String(esphomeMigrationTarget?.estimated_seconds || 20)), 0, true);

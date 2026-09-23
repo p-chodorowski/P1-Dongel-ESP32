@@ -15,7 +15,6 @@
 #define CDN_FORK_REPO       "p-chodorowski/P1-Dongel-ESP32"
 #define CDN_FORK_REF        P1_STR(_VERSION_MAJOR) "." P1_STR(_VERSION_MINOR) "." P1_STR(_VERSION_PATCH) "." P1_STR(_VERSION_FORK)
 #define PATH_DATA_FILES     "https://cdn.jsdelivr.net/gh/" CDN_FORK_REPO "@" CDN_FORK_REF "/data"
-#define URL_INDEX_FALLBACK  "https://cdn.jsdelivr.net/gh/mhendriks/P1-Dongel-ESP32@latest/data"
 
 #ifndef ENABLE_MIMICS
   #define ENABLE_MIMICS 1

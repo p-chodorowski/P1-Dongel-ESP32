@@ -65,14 +65,21 @@ String RewriteFirmwareCdnRefs(const String& html)
       out += html.substring(pos);
       break;
     }
-    const int slash = html.indexOf('/', at + marker.length());
-    if (slash < 0) {
-      out += html.substring(pos);
-      break;
+    const int verStart = at + marker.length();
+    int verEnd = verStart;
+    while (verEnd < (int)html.length()) {
+      const char c = html.charAt(verEnd);
+      if ((c >= '0' && c <= '9') || c == '.') verEnd++;
+      else break;
     }
-    out += html.substring(pos, at);
-    out += pinned;
-    pos = slash;
+    if (verEnd > verStart && verEnd < (int)html.length() && html.charAt(verEnd) == '/') {
+      out += html.substring(pos, at);
+      out += pinned;
+      pos = verEnd;
+    } else {
+      out += html.substring(pos, verEnd);
+      pos = verEnd;
+    }
   }
   return out;
 }
@@ -126,9 +133,6 @@ bool EnsureIndexFilePresent()
     DebugTln(F("Keeping installed index until the versioned UI can be downloaded"));
     return true;
   }
-
-  DebugTln(F("Index file not found at version URL, try fallback URL!\r"));
-  if (GetFile(settingIndexPage, URL_INDEX_FALLBACK) && indexFileUsable(settingIndexPage)) return true;
 
   DebugTln(F("Index file still not pressent!\r"));
   return false;
